@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
  * p2p.js — 房间码直连（PeerJS）
  * -----------------------------------------------------------
  * 用法：
@@ -17,13 +17,37 @@
   var PREFIX = 'epf-';
   var CODE_LEN = 6;
 
-  var RTC_CONFIG = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun.cloudflare.com:3478' }
-    ]
-  };
+  /* ---------------------------------------------------------
+   * ICE 服务器
+   *   STUN 只负责"告诉对方你在公网上的地址"，打洞还得靠两边自己。
+   *   对称 NAT / 严格防火墙下打洞会失败，那时必须靠 TURN 中继。
+   *
+   *   公开免费的 TURN 已经全部下线（实测 openrelay/freestun/expressturn
+   *   都拿不到 relay candidate），所以 TURN 凭证要从 js/turn-config.js 读，
+   *   由使用者自己填（Metered 免费额度每月 50 GB）。
+   * ------------------------------------------------------- */
+  var STUN = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' }
+  ];
+
+  function iceServers() {
+    var turn = global.EPF_TURN;
+    if (Array.isArray(turn) && turn.length) return turn.concat(STUN);
+    return STUN.slice();
+  }
+
+  function RTC_CONFIG() {
+    return {
+      iceServers: iceServers(),
+      iceCandidatePoolSize: 4
+    };
+  }
+
+  function hasTurn() {
+    return Array.isArray(global.EPF_TURN) && global.EPF_TURN.length > 0;
+  }
 
   function randomCode() {
     var s = '';
@@ -89,7 +113,7 @@
       if (!ready()) { reject(new Error('联机库没加载，刷新一下页面')); return; }
 
       var code = randomCode();
-      var peer = new global.Peer(PREFIX + code, { config: RTC_CONFIG, debug: 0 });
+      var peer = new global.Peer(PREFIX + code, { config: RTC_CONFIG(), debug: 0 });
 
       var settled = false;
       var timer = setTimeout(function () {
@@ -158,7 +182,7 @@
         return;
       }
 
-      var peer = new global.Peer({ config: RTC_CONFIG, debug: 0 });
+      var peer = new global.Peer({ config: RTC_CONFIG(), debug: 0 });
       var settled = false;
 
       var timer = setTimeout(function () {
