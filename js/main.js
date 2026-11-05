@@ -659,6 +659,14 @@
         break;
       }
 
+      case 'enter-zone': {
+        var dZ = U.posDesc(ev.slot);
+        U.log('<b>' + playerOf(ev.player).name + '</b> 停在'
+          + (ev.zone === 'ln' ? '镧系' : '锕系') + '入口，进了 <b>' + dZ.sym + '</b> · ' + dZ.tag, 'special');
+        await sleep(320);
+        break;
+      }
+
       case 'land': {
         if (ev.special) V.flashCell(ev.z, 'is-impact', 460);
         break;
@@ -707,7 +715,8 @@
       }
 
       case 'arrow': {
-        U.log('<b>' + playerOf(ev.player).name + '</b> 走 ' + arrowWord(ev.dir) + ' → <b>' + ev.to + '</b> 号', 'special');
+        var dA = U.posDesc(ev.to);
+        U.log('<b>' + playerOf(ev.player).name + '</b> 走 ' + arrowWord(ev.dir) + ' → <b>' + dA.sym + '</b> · ' + dA.tag, 'special');
         V.setTokenPos(ev.player, ev.to, { hop: true });
         V.followCell(ev.to);
         V.markTarget(ev.to);

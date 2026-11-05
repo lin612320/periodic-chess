@@ -170,15 +170,75 @@
   }
   ELEMENTS.sort(function (a, b) { return a.z - b.z; });
 
-  /* ---------- 轨道跳跃点 -------------
-   * 序号 +1 时，若视觉位置不连续，记为一次跳跃。
-   * wrap = 行末回绕到下行行首；dive = 下潜进 f 区；lift = 上浮回主表
+  /* ---------- 位置编码 -------------
+   * 镧系 / 锕系改成「踩到占位格才进」之后，
+   * 同一个元素序号会有两个不同的落点：
+   *   主表 (6,3) 的「57-71」占位格  ↔  镧系行里的 La(57)
+   * 所以位置不能直接用 z，要用 slotId：
+   *
+   *   1 ~ 56        主表
+   *   1001          主表镧系占位格（视觉 6,3）
+   *   72 ~ 88       主表
+   *   1002          主表锕系占位格（视觉 7,3）
+   *   104 ~ 118     主表（118 是终点）
+   *   2000 ~ 2014   镧系 57 ~ 71
+   *   3000 ~ 3014   锕系 89 ~ 103
    */
-  var HOPS = {
-    2: 'wrap', 10: 'wrap', 18: 'wrap', 36: 'wrap', 54: 'wrap',
-    56: 'dive', 71: 'lift',
-    86: 'wrap', 88: 'dive', 103: 'lift'
-  };
+  var SLOT_LN = 2000;
+  var SLOT_AN = 3000;
+  var SLOT_P_LN = 1001;
+  var SLOT_P_AN = 1002;
+
+  /* 主表轨道：1..56 → 占位 → 72..88 → 占位 → 104..118，共 90 格 */
+  var MAIN_TRACK = [];
+  (function () {
+    var z;
+    for (z = 1; z <= 56; z++) MAIN_TRACK.push(z);
+    MAIN_TRACK.push(SLOT_P_LN);
+    for (z = 72; z <= 88; z++) MAIN_TRACK.push(z);
+    MAIN_TRACK.push(SLOT_P_AN);
+    for (z = 104; z <= 118; z++) MAIN_TRACK.push(z);
+  })();
+
+  var LN_TRACK = [];
+  var AN_TRACK = [];
+  (function () {
+    var i;
+    for (i = 0; i < 15; i++) LN_TRACK.push(SLOT_LN + i);   // 57..71
+    for (i = 0; i < 15; i++) AN_TRACK.push(SLOT_AN + i);   // 89..103
+  })();
+
+  var MAIN_INDEX = {};
+  (function () {
+    for (var i = 0; i < MAIN_TRACK.length; i++) MAIN_INDEX[MAIN_TRACK[i]] = i;
+  })();
+
+  /** slotId → 元素序号（渲染、知识卡、特殊格都用它） */
+  function slotZ(id) {
+    if (id === SLOT_P_LN) return 57;
+    if (id === SLOT_P_AN) return 89;
+    if (id >= SLOT_LN && id <= SLOT_LN + 14) return 57 + (id - SLOT_LN);
+    if (id >= SLOT_AN && id <= SLOT_AN + 14) return 89 + (id - SLOT_AN);
+    return id;
+  }
+
+  /** slotId → 视觉坐标 {row, col} */
+  function slotPos(id) {
+    if (id === SLOT_P_LN) return { row: 6, col: 3 };
+    if (id === SLOT_P_AN) return { row: 7, col: 3 };
+    var e = BY_Z[slotZ(id)];
+    return e ? { row: e.row, col: e.col } : null;
+  }
+
+  function isPlaceholder(id) {
+    return id === SLOT_P_LN || id === SLOT_P_AN;
+  }
+
+  function slotZone(id) {
+    if (id >= SLOT_LN && id <= SLOT_LN + 14) return 'ln';
+    if (id >= SLOT_AN && id <= SLOT_AN + 14) return 'an';
+    return null;
+  }
 
   /* ---------- 特殊格子 -------------
    * up/down/left/right = 方向格；duel/sleep/again/tornado = 效果格
@@ -274,7 +334,6 @@
     ELEMENTS: ELEMENTS,
     BY_Z: BY_Z,
     BY_POS: BY_POS,
-    HOPS: HOPS,
     SPECIALS: SPECIALS,
     SPECIAL_META: SPECIAL_META,
     THEMES: THEMES,
@@ -283,6 +342,20 @@
     AMBIENT_LINES: AMBIENT_LINES,
     MAX_Z: 118,
     ROWS_MAIN: 7,
-    COLS: 18
+    COLS: 18,
+
+    /* 位置编码 */
+    SLOT_LN: SLOT_LN,
+    SLOT_AN: SLOT_AN,
+    SLOT_P_LN: SLOT_P_LN,
+    SLOT_P_AN: SLOT_P_AN,
+    MAIN_TRACK: MAIN_TRACK,
+    LN_TRACK: LN_TRACK,
+    AN_TRACK: AN_TRACK,
+    MAIN_INDEX: MAIN_INDEX,
+    slotZ: slotZ,
+    slotPos: slotPos,
+    isPlaceholder: isPlaceholder,
+    slotZone: slotZone
   };
 })(window);

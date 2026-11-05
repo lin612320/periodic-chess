@@ -22,6 +22,26 @@
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
   /* =========================================================
+   * 位置描述 —— slotId 可能是主表 1..56/72..88/104..118、
+   * 占位格 1001/1002，或镧系/锕系区 2000+/3000+
+   * ======================================================= */
+  function posDesc(pos) {
+    var sym, tag;
+    if (D.isPlaceholder(pos)) {
+      sym = pos === D.SLOT_P_LN ? '镧' : '锕';
+      tag = pos === D.SLOT_P_LN ? '镧系入口' : '锕系入口';
+    } else {
+      var e = D.BY_Z[D.slotZ(pos)];
+      sym = e ? e.sym : '?';
+      var zone = D.slotZone(pos);
+      if (zone === 'ln') tag = '镧系 · 第 ' + (pos - D.SLOT_LN + 1) + ' 格';
+      else if (zone === 'an') tag = '锕系 · 第 ' + (pos - D.SLOT_AN + 1) + ' 格';
+      else tag = '第 ' + pos + ' 格';
+    }
+    return { sym: sym, tag: tag };
+  }
+
+  /* =========================================================
    * 初始化 DOM 引用
    * ======================================================= */
   function init() {
@@ -158,15 +178,13 @@
   function updatePlayer(p) {
     var row = dom.players.querySelector('[data-pid="' + p.id + '"]');
     if (!row) return;
-    var el0 = D.BY_Z[p.pos];
+    var d0 = posDesc(p.pos);
     var where = row.querySelector('.player__where');
-    if (el0) {
-      where.innerHTML = '';
-      var b = document.createElement('b');
-      b.textContent = el0.sym;
-      where.appendChild(b);
-      where.appendChild(document.createTextNode(' 第 ' + p.pos + ' 格'));
-    }
+    where.innerHTML = '';
+    var b = document.createElement('b');
+    b.textContent = d0.sym;
+    where.appendChild(b);
+    where.appendChild(document.createTextNode(' ' + d0.tag));
 
     var state = row.querySelector('.player__state');
     state.innerHTML = '';
@@ -435,7 +453,8 @@
       + '<p>从 <b>1 号氢</b>出发，沿元素序号一路走到 <b>118 号鿫</b>。</p>'
       + '<p>骰子是科学计算器：<code>6×RAN+0.5</code>，四舍五入得 1~6。</p>'
       + '<p>走到第 118 格必须 <b>恰好停住</b>才算赢；步子越过了就从第 7 周期第 1 格 <b>Fr(87)</b> 接着走。</p>'
-      + '<p>走到 57 号镧、89 号锕会自然拐进下面的镧系/锕系行，走完自动回到主表，不用恰好停在出口。</p>'
+      + '<p>第 6、7 周期中间那块 <b>镧系 / 锕系入口格</b>是暗门：只有 <b>恰好停在这一格</b> 才会拐进下面的镧系 / 锕系行，'
+      + '在系里继续走完剩下的步数，走到最后一个元素自动回到主表（Lu→Hf，Lr→Rf）。直接从旁边路过不算进去。</p>'
       + '</div>'
       + '<dl class="rules-table">';
 
@@ -464,11 +483,11 @@
 
     candidates.forEach(function (pid) {
       var p = players[pid];
-      var e = D.BY_Z[p.pos];
+      var d0 = posDesc(p.pos);
       html += '<button type="button" class="duel-pick" data-pid="' + pid + '" style="--tk:' + p.color + '">'
         + '<span class="duel-pick__dot"></span>'
         + '<span class="duel-pick__name">' + p.name + (p.isBot ? '（AI）' : '') + '</span>'
-        + '<span class="duel-pick__where">' + (e ? e.sym : '?') + ' · 第 ' + p.pos + ' 格</span>'
+        + '<span class="duel-pick__where">' + d0.sym + ' · ' + d0.tag + '</span>'
         + '</button>';
     });
 
@@ -553,6 +572,7 @@
   global.EPF.ui = {
     init: init,
     dom: dom,
+    posDesc: posDesc,
     // 开场
     renderThemeCards: renderThemeCards,
     markThemeCard: markThemeCard,

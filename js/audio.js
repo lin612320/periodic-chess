@@ -35,6 +35,7 @@
 
   var synthTimer = null;
   var audioEl = null;
+  var fadeTimer = null;
   var tracks = [];
   var listeners = [];
 
@@ -336,8 +337,10 @@
     if (!tracks.length) return false;
     if (!audioEl) {
       audioEl = new Audio();
+      audioEl.preload = 'none';
       audioEl.loop = false;
       audioEl.addEventListener('ended', function () {
+        if (audioEl.loop) return;
         state.trackIndex = (state.trackIndex + 1) % tracks.length;
         playTrackFile();
       });
@@ -348,15 +351,34 @@
       });
     }
     var t = tracks[state.trackIndex % tracks.length];
+    /* 单曲 / 标了 loop 的曲子直接无缝循环，不用等 ended */
+    audioEl.loop = !!t.loop || tracks.length === 1;
     audioEl.src = t.src;
     audioEl.volume = state.volume;
     var pr = audioEl.play();
     if (pr && pr.catch) pr.catch(function () { /* 被自动播放策略拦了，忽略 */ });
+    fadeInElement();
     notify();
     return true;
   }
 
+  /** 淡入，别让音乐一上来就怼耳朵 */
+  function fadeInElement() {
+    if (!audioEl) return;
+    if (fadeTimer) clearInterval(fadeTimer);
+    var target = state.volume;
+    var t0 = Date.now();
+    audioEl.volume = 0;
+    fadeTimer = setInterval(function () {
+      if (!audioEl || !state.on) { clearInterval(fadeTimer); fadeTimer = null; return; }
+      var k = Math.min(1, (Date.now() - t0) / 1800);
+      audioEl.volume = Math.max(0, Math.min(1, target * k));
+      if (k >= 1) { clearInterval(fadeTimer); fadeTimer = null; }
+    }, 90);
+  }
+
   function stopTrackFile() {
+    if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null; }
     if (audioEl) {
       try { audioEl.pause(); } catch (e) { /* noop */ }
     }
@@ -449,6 +471,9 @@
 
   function onChange(fn) { listeners.push(fn); }
 
+  /** 文件模式下暴露 <audio> 元素（调试 / 自检用） */
+  function element() { return audioEl; }
+
   /** 供其它模块共用同一个 AudioContext（序章音景用） */
   function getContext() {
     if (!ensureContext()) return null;
@@ -479,6 +504,7 @@
     next: next,
     setVolume: setVolume,
     onChange: onChange,
+    element: element,
     getContext: getContext,
     info: info,
     state: state

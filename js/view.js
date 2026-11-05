@@ -89,13 +89,19 @@
       if (e.z === 1) cell.classList.add('is-start');
       if (e.z === D.MAX_Z) cell.classList.add('is-goal');
 
-      cellMap[e.z] = cell;
+      /* 系内元素用 slotId 当 key，避免和主表的占位格撞号 */
+      var slot = e.z;
+      if (e.z >= 57 && e.z <= 71) slot = D.SLOT_LN + (e.z - 57);
+      else if (e.z >= 89 && e.z <= 103) slot = D.SLOT_AN + (e.z - 89);
+
+      cell.dataset.slot = String(slot);
+      cellMap[slot] = cell;
       frag.appendChild(cell);
     }
 
-    /* 镧系 / 锕系的占位小标：主表 (6,3) 与 (7,3) 空着，画两个提示块 */
-    frag.appendChild(makeFBlockHint(6, 3, '57-71', '镧系'));
-    frag.appendChild(makeFBlockHint(7, 3, '89-103', '锕系'));
+    /* 主表的两个「入口占位格」：踩到才会进对应的系 */
+    frag.appendChild(makeFBlockGate(D.SLOT_P_LN, 6, 3, '57-71', '镧系'));
+    frag.appendChild(makeFBlockGate(D.SLOT_P_AN, 7, 3, '89-103', '锕系'));
 
     boardEl.appendChild(frag);
 
@@ -105,17 +111,20 @@
     relayout();
   }
 
-  function makeFBlockHint(row, col, range, label) {
-    var d = el('div', 'cell');
+  function makeFBlockGate(slot, row, col, range, label) {
+    var d = el('div', 'cell cell--gate');
     d.style.gridRow = String(row);
     d.style.gridColumn = String(col);
-    d.style.opacity = '.34';
-    d.style.pointerEvents = 'none';
-    d.dataset.placeholder = '1';
+    d.dataset.slot = String(slot);
+    d.dataset.zoneEntry = label;
+    d.setAttribute('role', 'img');
+    d.title = range + ' ' + label + '入口 · 恰好停在这里才会进去';
+
     d.appendChild(el('span', 'cell__z', '*'));
-    d.appendChild(el('span', 'cell__sym', '–'));
+    d.appendChild(el('span', 'cell__sym', '→'));
     d.appendChild(el('span', 'cell__name', label));
-    d.title = range + ' ' + label;
+
+    cellMap[slot] = d;
     return d;
   }
 
@@ -146,8 +155,7 @@
     }
   }
 
-  /** 同格多子时按圆周错开 */
-  function placeToken(token, z, pid) {
+  /** 同格多子时按圆周错开 */  function placeToken(token, z, pid) {
     var p = posCache[z];
     if (!p) return;
     var mates = [];
@@ -298,6 +306,16 @@
   /* ---------------------------------------------------------
    * 逐格移动（核心动画）
    * ------------------------------------------------------- */
+  /** 两个槽位在视觉上是否不连续（跨行 / 跨系 / 出系），需要“跳”过去 */
+  function isHopSlot(from, to) {
+    if (from === to) return false;
+    var a = D.slotPos(from);
+    var b = D.slotPos(to);
+    if (!a || !b) return true;
+    if (a.row !== b.row) return true;
+    return Math.abs(a.col - b.col) > 1;
+  }
+
   /**
    * 沿 path 逐格移动棋子，每格点亮一次。
    * @param {number} pid
@@ -314,7 +332,7 @@
         if (i >= path.length) { resolve(); return; }
         var z = path[i];
         var prev = i === 0 ? path[0] : path[i - 1];
-        var hop = !!D.HOPS[prev];
+        var hop = (i > 0) && isHopSlot(prev, z);
         setTokenPos(pid, z, { hop: hop });
         followCell(z);
         pulsePath([z], 420);

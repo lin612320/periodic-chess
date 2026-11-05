@@ -14,9 +14,15 @@
   var D = global.EPF.data;
   var BY_Z = D.BY_Z;
   var BY_POS = D.BY_POS;
-  var HOPS = D.HOPS;
   var SPECIALS = D.SPECIALS;
   var MAX_Z = D.MAX_Z;
+  var SLOT_LN = D.SLOT_LN;
+  var SLOT_AN = D.SLOT_AN;
+  var SLOT_P_LN = D.SLOT_P_LN;
+  var SLOT_P_AN = D.SLOT_P_AN;
+  var MAIN_TRACK = D.MAIN_TRACK;
+  var MAIN_INDEX = D.MAIN_INDEX;
+  var slotZ = D.slotZ;
   var WRAP_TO = 87;          // 溢出后回到第 7 周期第 1 格 Fr
   var DUEL_THRESHOLD = 0.9;  // 决斗命中线
   var MAX_CHAIN_AGAIN = 8;   // 连续「多摇一次」保护
@@ -70,36 +76,81 @@
   }
 
   /* ---------------------------------------------------------
-   * 2. 轨道推进
+   * 2. 轨道推进（镧系/锕系：踩到占位格才进）
+   * -----------------------------------------------------------
+   * 位置用 slotId（见 data.js）：
+   *   1..56 / 72..88 / 104..118  主表
+   *   1001 / 1002                两个占位格（入口标记，棋子不会停在这）
+   *   2000..2014 / 3000..3014    镧系 / 锕系内部
+   *
+   * 走到主表的占位格 → 直接转入对应的系，剩余步数继续在系里走；
+   * 系内走到最后一格 → 自动出到主表 72 / 104；
+   * 主表 118 之后 → 回到 87。
    * ------------------------------------------------------- */
 
-  /**
-   * 从 from 走 steps 步，返回逐格路径。
-   * 终点 118 是终点线：恰好停住才算到达；
-   * 越过 118 则从 87 继续，剩余步数照走。
-   */
+  function inLN(id) { return id >= SLOT_LN && id <= SLOT_LN + 14; }
+  function inAN(id) { return id >= SLOT_AN && id <= SLOT_AN + 14; }
+
+  /** 元素序号 → slotId（57~71 / 89~103 一定属于两个系） */
+  function toSlot(z) {
+    if (z >= 57 && z <= 71) return SLOT_LN + (z - 57);
+    if (z >= 89 && z <= 103) return SLOT_AN + (z - 89);
+    return z;
+  }
+
+  /** 走一步 */
+  function nextSlot(id) {
+    /* 系内 */
+    if (inLN(id)) return id < SLOT_LN + 14 ? id + 1 : 72;    // Lu 之后出到 Hf
+    if (inAN(id)) return id < SLOT_AN + 14 ? id + 1 : 104;   // Lr 之后出到 Rf
+
+    /* 主表 */
+    var i = MAIN_INDEX[id];
+    if (i === undefined) return WRAP_TO;
+    if (i >= MAIN_TRACK.length - 1) return WRAP_TO;          // 118 之后回 Fr(87)
+
+    var nxt = MAIN_TRACK[i + 1];
+    if (nxt === SLOT_P_LN) return SLOT_LN;                   // 踩到镧系占位 → 进 La
+    if (nxt === SLOT_P_AN) return SLOT_AN;                   // 踩到锕系占位 → 进 Ac
+    return nxt;
+  }
+
+  /** 从 from 走 steps 步，返回逐格路径 */
   function stepPath(from, steps) {
     var path = [];
     var cur = from;
     for (var i = 0; i < steps; i++) {
-      cur = (cur >= MAX_Z) ? WRAP_TO : cur + 1;
+      cur = nextSlot(cur);
       path.push(cur);
     }
     return path;
   }
 
-  /** 计算落点（不生成路径），逻辑与 stepPath 一致 */
+  /** 只算落点 */
   function advance(from, steps) {
     var cur = from;
-    for (var i = 0; i < steps; i++) {
-      cur = (cur >= MAX_Z) ? WRAP_TO : cur + 1;
-    }
+    for (var i = 0; i < steps; i++) cur = nextSlot(cur);
     return cur;
   }
 
-  /** 该序号步进到下一格时，视觉上是否发生跳跃 */
-  function hopAfter(z) {
-    return HOPS[z] || null;
+  /** 这一步是不是跨行/跨系了（给动画用） */
+  function isHop(from, to) {
+    var a = D.slotPos(from);
+    var b = D.slotPos(to);
+    if (!a || !b) return true;
+    if (a.row !== b.row) return true;
+    return Math.abs(a.col - b.col) > 1;
+  }
+
+  /**
+   * 行程进度（给「谁领先」用）：主表按轨道序号 ×100，
+   * 系内算成「刚过入口」，保证比较结果和实际路程一致。
+   */
+  function progress(pos) {
+    if (inLN(pos)) return MAIN_INDEX[SLOT_P_LN] * 100 + 50 + (pos - SLOT_LN);
+    if (inAN(pos)) return MAIN_INDEX[SLOT_P_AN] * 100 + 50 + (pos - SLOT_AN);
+    var i = MAIN_INDEX[pos];
+    return (i === undefined ? 0 : i) * 100;
   }
 
   /* ---------------------------------------------------------
@@ -259,6 +310,18 @@
     var from = p.pos;
     var path = stepPath(from, die.value);
     p.pos = path.length ? path[path.length - 1] : from;
+
+    /* 这一步是不是踩进了镧系/锕系，单独发个事件给 UI 播动画 */
+    var entered = null;
+    var prevSlot = from;
+    for (var k = 0; k < path.length; k++) {
+      if (D.slotZone(path[k]) && !D.slotZone(prevSlot)) {
+        entered = D.slotZone(path[k]);
+        break;
+      }
+      prevSlot = path[k];
+    }
+
     events.push({
       type: 'move',
       player: p.id,
@@ -267,9 +330,20 @@
       path: path,
       hops: path.map(function (z, i) {
         var prev = i === 0 ? from : path[i - 1];
-        return hopAfter(prev);
-      })
+        return isHop(prev, z);
+      }),
+      entered: entered
     });
+
+    if (entered) {
+      events.push({
+        type: 'enter-zone',
+        player: p.id,
+        zone: entered,
+        slot: p.pos,
+        text: p.name + ' 踩到了' + (entered === 'ln' ? '镧系' : '锕系') + '入口'
+      });
+    }
 
     // 恰好停在 118 → 胜利
     if (p.pos === MAX_Z) {
@@ -289,8 +363,9 @@
    * 落点结算。位移类（方向格、龙卷风）不二次触发特殊格。
    */
   function resolveLanding(state, p, events) {
-    var spec = SPECIALS[p.pos];
-    events.push({ type: 'land', player: p.id, z: p.pos, special: spec ? spec.type : null });
+    var zHere = slotZ(p.pos);
+    var spec = SPECIALS[zHere];
+    events.push({ type: 'land', player: p.id, z: p.pos, zEl: zHere, special: spec ? spec.type : null });
 
     if (!spec) {
       state.phase = 'ready';
@@ -302,6 +377,7 @@
       type: 'special',
       player: p.id,
       z: p.pos,
+      zEl: zHere,
       special: spec.type,
       text: meta.glyph + ' ' + meta.label
     });
@@ -327,7 +403,8 @@
       case 'tornado': {
         var t = rollTornado(state.rng);
         var tfrom = p.pos;
-        p.pos = t.value;
+        /* 随机到 57~71 / 89~103 就是直接卷进对应的系 */
+        p.pos = toSlot(t.value);
         events.push({
           type: 'tornado',
           player: p.id,
@@ -336,7 +413,7 @@
           value: t.value,
           expr: t.expr,
           from: tfrom,
-          to: t.value
+          to: p.pos
         });
         if (p.pos === MAX_Z) {
           p.finished = true;
@@ -353,17 +430,18 @@
       case 'down':
       case 'left':
       case 'right': {
-        var r = applyArrow(p.pos, spec.type, null, state.rng);
+        /* 方向格按周期表坐标走，算完再换回 slotId */
+        var r = applyArrow(zHere, spec.type, null, state.rng);
         if (r.moved) {
           var afrom = p.pos;
-          p.pos = r.to;
+          p.pos = toSlot(r.to);
           events.push({
             type: 'arrow',
             player: p.id,
             dir: r.reason,
             distance: r.distance || 1,
             from: afrom,
-            to: r.to
+            to: p.pos
           });
           // 位移恰好踩中终点同样算赢
           if (p.pos === MAX_Z) {
@@ -477,7 +555,8 @@
     });
     if (!rivals.length) return null;
     rivals.sort(function (a, b) {
-      if (b.pos !== a.pos) return b.pos - a.pos;
+      var d = progress(b.pos) - progress(a.pos);
+      if (d !== 0) return d;
       return a.id - b.id;
     });
     return rivals[0].id;
@@ -497,7 +576,10 @@
     // 轨道
     stepPath: stepPath,
     advance: advance,
-    hopAfter: hopAfter,
+    nextSlot: nextSlot,
+    isHop: isHop,
+    progress: progress,
+    toSlot: toSlot,
     // 方向格
     applyArrow: applyArrow,
     rowList: rowList,

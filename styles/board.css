@@ -193,6 +193,47 @@
   white-space: nowrap;
 }
 
+/* ---------- 镧系 / 锕系入口格 ----------
+ * 主表 (6,3) / (7,3)：整块代表 57-71 / 89-103，
+ * 棋子恰好停在这里才会被吸进对应的系。
+ */
+.cell--gate {
+  --cat: #d7b282;
+  border-style: dashed;
+  border-color: rgba(215, 178, 130, .42);
+  background:
+    repeating-linear-gradient(135deg,
+      rgba(215, 178, 130, .10) 0 6px,
+      rgba(215, 178, 130, .02) 6px 12px),
+    rgba(16, 9, 24, .5);
+  color: rgba(242, 232, 220, .82);
+}
+
+.cell--gate .cell__z {
+  color: rgba(215, 178, 130, .7);
+}
+
+.cell--gate .cell__sym {
+  font-size: calc(var(--cell) * .3);
+  color: rgba(232, 198, 148, .9);
+  margin-top: calc(var(--cell) * .1);
+}
+
+.cell--gate .cell__name {
+  color: rgba(232, 198, 148, .78);
+  letter-spacing: .08em;
+}
+
+.cell--gate::before {
+  content: "入口";
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  font-size: calc(var(--cell) * .14);
+  letter-spacing: .04em;
+  color: rgba(215, 178, 130, .5);
+}
+
 /* ---------- 类别色带 ---------- */
 .cell[data-cat="am"] { --cat: #e0785a; }
 .cell[data-cat="ae"] { --cat: #e0a15a; }
