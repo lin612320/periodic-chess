@@ -83,6 +83,7 @@
       }
 
       case 'start':    emit('start', msg); break;
+      case 'grant':    emit('grant', msg); break;
       case 'snapshot': emit('snapshot', msg); break;
       case 'events':   emit('events', msg.events || []); break;
       case 'intent':   emit('intent', msg); break;
@@ -315,6 +316,9 @@
   function events(list)             { return broadcast({ t: 'events', events: list }); }
   function snapshot(state)          { return broadcast({ t: 'snapshot', snapshot: pack(state) }); }
 
+  /** 房主授权某个座位出手（客户端只有收到这个才点亮按钮） */
+  function grant(seat)              { return broadcast({ t: 'grant', player: seat }); }
+
   function intent(kind, payload) {
     var msg = { t: 'intent', kind: kind, payload: payload || null };
     if (mode === 'p2p-client') {
@@ -434,6 +438,7 @@
     broadcast: broadcast,
     events: events,
     snapshot: snapshot,
+    grant: grant,
     intent: intent,
     relayRaw: relayRaw,
     chat: chat,

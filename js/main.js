@@ -29,12 +29,20 @@
   var state = null;
   var busy = false;
   var pendingAction = null;    // { playerId, resolve }
+  var grantedSeat = -1;        // 房主当前授权哪个座位出手（客户端据此点亮按钮）
+  var queuedRoll = false;      // 按钮亮着就点了，引擎还没注册等待 → 先记着
   var pendingDuel = null;      // { challengerId, candidates, resolve }
   var ambientTimer = null;
   var ambientIdx = 0;
 
   function isHostLike() { return mode === 'solo' || mode === 'host'; }
   function isClient() { return mode === 'client'; }
+
+  /** 本机的座位号：房主/单机恒为 0，客机看服务端分配 */
+  function localSeat() {
+    if (isClient()) return (global.EPF.net && global.EPF.net.me) ? global.EPF.net.me.seat : -1;
+    return 0;
+  }
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
@@ -111,8 +119,20 @@
       if (!p) return;
 
       if (isClient()) {
-        if (p.id !== N.me.seat) return;   // 不是自己的回合
+        if (p.id !== N.me.seat) { U.toast('现在是 ' + p.name + ' 的回合'); return; }
+        if (grantedSeat !== p.id) { U.toast('等房主把这个回合交给你'); return; }
+        grantedSeat = -1;                       // 交出去就立刻锁住，别连点
+        U.setRollState('busy');
         N.intent('roll');
+        return;
+      }
+
+      // 房主：只替自己掷，绝不代远程座位掷骰
+      if (p.id !== localSeat()) { U.toast('现在是 ' + p.name + ' 的回合'); return; }
+      if (!pendingAction || pendingAction.playerId !== p.id) {
+        // 按钮亮着但引擎还没轮到等待 → 记账，等注册时立刻兑现
+        queuedRoll = true;
+        U.toast('正在结算上一步，稍等');
         return;
       }
       fulfillAction(p.id);
@@ -345,6 +365,8 @@
 
     N.on('peer-joined', function (p) {
       U.toast(p.name + ' 连进来了');
+      /* 中途进来的人先对齐一次权威状态 */
+      if (mode === 'host' && state && state.players.length) N.snapshot(state);
     });
 
     N.on('peer-left', function (p) {
@@ -358,9 +380,54 @@
       clientJoinStage(msg);
     });
 
+    var clientQueue = Promise.resolve();
+    var clientBusy = 0;           // 正在播的批次数量
+    var pendingSync = null;       // 播完再对齐的权威状态
+
     N.on('events', function (events) {
       if (!isClient()) return;
-      playEvents(events).then(syncClientUI);
+      clientBusy++;
+
+      /* 兜底：某一批卡住（动画没回来）也不能把客机永久冻住 */
+      var guard = setTimeout(function () {
+        console.warn('[client] 这批事件播太久了，强制收尾');
+        clientQueue = Promise.resolve();    // 丢掉卡住的那条链
+        clientBusy = 0;
+        if (pendingSync) { var m = pendingSync; pendingSync = null; applySnapshot(m); }
+      }, 45000);
+
+      /* 串行播放：两批事件叠在一起会让按钮状态错乱 */
+      clientQueue = clientQueue
+        .then(function () { return playEvents(events); })
+        .catch(function (err) { console.error('[client] 播放失败', err); })
+        .then(function () {
+          clearTimeout(guard);
+          clientBusy = Math.max(0, clientBusy - 1);
+          if (clientBusy > 0) return;
+          if (pendingSync) {
+            var m2 = pendingSync;
+            pendingSync = null;
+            applySnapshot(m2);
+          } else {
+            syncClientUI();
+          }
+        });
+    });
+
+    N.on('snapshot', function (msg) {
+      if (!isClient()) return;
+      if (clientBusy > 0) { pendingSync = msg; return; }   // 别在动画中间硬拽
+      applySnapshot(msg);
+    });
+
+    N.on('grant', function (msg) {
+      if (!isClient()) return;
+      grantedSeat = (msg && typeof msg.player === 'number') ? msg.player : -1;
+      if (grantedSeat === N.me.seat) {
+        U.setRollState('ready');
+      } else {
+        U.setRollState('wait');
+      }
     });
 
     N.on('intent', function (msg) {
@@ -443,6 +510,27 @@
     V.setCurrent(first.pos);
     V.markActive(first.id);
     U.log('连线成功，房间 ' + N.me.room + '，共 ' + state.players.length + ' 人。', 'turn');
+    grantedSeat = -1;
+    queuedRoll = false;
+    syncClientUI();
+  }
+
+  /** 客机把房主的权威状态硬对齐（位置 / 回合 / 阶段） */
+  function applySnapshot(msg) {
+    if (!isClient() || !state || !msg || !msg.snapshot) return;
+    var sn = msg.snapshot;
+    state.turn = sn.turn;
+    state.phase = sn.phase;
+    if (typeof sn.round === 'number') state.round = sn.round;
+    (sn.players || []).forEach(function (sp) {
+      var p = state.players[sp.id];
+      if (!p) return;
+      p.pos = sp.pos;
+      p.sleeping = !!sp.sleeping;
+      p.finished = !!sp.finished;
+      V.setTokenPos(p.id, p.pos);
+      U.updatePlayer(p);
+    });
     syncClientUI();
   }
 
@@ -455,12 +543,17 @@
     V.setCurrent(p.pos);
     state.players.forEach(function (q) { U.updatePlayer(q); });
 
-    var mine = (p.id === N.me.seat);
-    U.setRollState(mine && state.phase !== 'over' ? 'ready' : 'wait');
     if (state.phase === 'over' && state.winner) {
       U.setRollState('off');
       onWin();
+      return;
     }
+
+    /* 关键：只有「房主刚把这个回合授权给我」才点亮按钮，
+     * 否则一律锁着 —— 避免按钮亮着却点不动 */
+    var mine = (p.id === N.me.seat);
+    if (!mine) { U.setRollState('wait'); return; }
+    U.setRollState(grantedSeat === p.id ? 'ready' : 'busy');
   }
 
   /* =========================================================
@@ -483,6 +576,11 @@
   function buildGame(opts, done) {
     try {
       state = E.createGame(opts);
+      busy = false;
+      pendingAction = null;
+      pendingDuel = null;
+      queuedRoll = false;
+      grantedSeat = -1;
 
       U.enterStage();
       V.init({ board: U.dom.board, speed: cfg.speed });
@@ -526,6 +624,13 @@
   function waitAction(playerId) {
     return new Promise(function (resolve) {
       pendingAction = { playerId: playerId, resolve: resolve };
+      /* 手快一步点的骰子，在这儿补上 */
+      if (queuedRoll && playerId === localSeat()) {
+        queuedRoll = false;
+        var r = pendingAction.resolve;
+        pendingAction = null;
+        r();
+      }
     });
   }
 
@@ -544,7 +649,24 @@
     if (!isHostLike()) return;
     if (!state || state.phase === 'over' || busy) return;
     busy = true;
+    try {
+      await runTurn();
+    } catch (err) {
+      /* 任何一步炸了都不能把 busy 卡死，否则按钮永远是「计算中」 */
+      console.error('[turnLoop] 回合中断', err);
+      pendingAction = null;
+      pendingDuel = null;
+      queuedRoll = false;
+      grantedSeat = -1;
+      busy = false;
+      if (state && state.phase !== 'over') state.phase = 'ready';
+      refreshPanels();
+      U.toast('这一步出错了，已恢复，再按一次 RAN');
+      U.setRollState('ready');
+    }
+  }
 
+  async function runTurn() {
     var p = E.currentPlayer(state);
     U.setTurn(p);
     U.setActive(state.players, p.id);
@@ -567,13 +689,22 @@
         U.setRollState('wait');
         await sleep(620);
       } else {
-        // 联机时只有房主本人（座位 0）用本机按钮，其余是远程人类
-        var isLocalHuman = (mode === 'solo') || (p.id === 0);
-        U.setRollState(isLocalHuman ? 'ready' : 'wait');
-        if (chain > 0 && isLocalHuman) U.lcdMessage('再来一次', '再按 RAN');
+        /* 联机时只有房主本人（座位 0）用本机按钮，其余是远程人类 */
+        var isLocalHuman = (mode === 'solo') || (p.id === localSeat());
+        if (isLocalHuman) {
+          grantedSeat = p.id;
+          U.setRollState('ready');
+          if (chain > 0) U.lcdMessage('再来一次', '再按 RAN');
+        } else {
+          /* 远程人类：先授权，对方按钮才会亮 */
+          grantedSeat = p.id;
+          U.setRollState('wait');
+          if (mode === 'host') N.grant(p.id);
+        }
         await waitAction(p.id);
       }
 
+      grantedSeat = -1;
       U.setRollState('busy');
 
       var res = E.rollAndMove(state);
@@ -591,10 +722,12 @@
     }
 
     refreshPanels();
-    endTurnFlow();
+    return endTurnFlow();
   }
 
   function endTurnFlow() {
+    queuedRoll = false;
+    grantedSeat = -1;
     var evs = E.endTurn(state);
     return playEvents(evs, { relay: true }).then(function () {
       var p = E.currentPlayer(state);
@@ -629,6 +762,10 @@
       } catch (err) {
         console.error('[playEvents] 事件播放失败', ev.type, err);
       }
+    }
+    /* 每批结束后房主再发一次权威快照：漏包 / 动画卡住都能自动纠回来 */
+    if (opts.relay && mode === 'host' && N.active) {
+      N.snapshot(state);
     }
   }
 
