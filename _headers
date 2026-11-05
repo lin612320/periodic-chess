@@ -1,0 +1,20 @@
+# Cloudflare Pages 响应头
+# 这是个纯静态小游戏，不涉及账号与隐私数据，只加必要的几项
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=()
+
+/styles/*
+  Cache-Control: public, max-age=86400
+
+/js/*
+  Cache-Control: public, max-age=86400
+
+/audio/*
+  Cache-Control: public, max-age=604800
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate

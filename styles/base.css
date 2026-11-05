@@ -1,0 +1,285 @@
+/* ============================================================
+ * base.css — 变量 / reset / 字体 / 通用控件
+ * ============================================================ */
+
+/* ---------- 设计令牌 ---------- */
+:root {
+  --font-serif: "Songti SC", "SimSun", "Noto Serif SC", "Source Han Serif SC", serif;
+  --font-sans: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Hiragino Sans GB", system-ui, sans-serif;
+  --font-mono: "Consolas", "SF Mono", "Courier New", ui-monospace, monospace;
+
+  --r-sm: 6px;
+  --r-md: 12px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+
+  --dur-fast: 140ms;
+  --dur-mid: 280ms;
+  --dur-slow: 620ms;
+  --ease-out: cubic-bezier(.22, .61, .36, 1);
+  --ease-soft: cubic-bezier(.4, 0, .2, 1);
+  --ease-back: cubic-bezier(.34, 1.56, .64, 1);
+
+  /* 三套主题共用的中性纸色 */
+  --ink: #f2e8dc;
+  --ink-dim: rgba(242, 232, 220, .62);
+  --ink-faint: rgba(242, 232, 220, .34);
+  --line: rgba(242, 232, 220, .14);
+  --line-strong: rgba(242, 232, 220, .26);
+}
+
+/* ---------- 主题：化学反应原理（玫红） ---------- */
+body[data-theme="reaction"] {
+  --accent: #e0567f;
+  --accent-soft: #f3a7bd;
+  --deep: #2a1230;
+  --deeper: #170a1e;
+  --glow: #ff7aa2;
+  --sky-warm: #ff9a6b;
+  --sky-mid: #c2506f;
+  --sky-cold: #2b1740;
+  --glass: rgba(42, 18, 48, .58);
+  --glass-line: rgba(224, 86, 127, .26);
+}
+
+/* ---------- 主题：物质结构与性质（青绿） ---------- */
+body[data-theme="structure"] {
+  --accent: #3fb6a8;
+  --accent-soft: #8fe0d4;
+  --deep: #0e2434;
+  --deeper: #061620;
+  --glow: #5fe0cc;
+  --sky-warm: #f0b27a;
+  --sky-mid: #3f8f96;
+  --sky-cold: #0c2436;
+  --glass: rgba(14, 36, 52, .58);
+  --glass-line: rgba(63, 182, 168, .26);
+}
+
+/* ---------- 主题：有机化学基础（琥珀） ---------- */
+body[data-theme="organic"] {
+  --accent: #e0913f;
+  --accent-soft: #f5c98a;
+  --deep: #2d1f10;
+  --deeper: #1a1108;
+  --glow: #ffb35c;
+  --sky-warm: #ffc16b;
+  --sky-mid: #b5743a;
+  --sky-cold: #2a1b0e;
+  --glass: rgba(45, 31, 16, .58);
+  --glass-line: rgba(224, 145, 63, .26);
+}
+
+/* ---------- reset ---------- */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--deeper);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, p, ul, ol, li, figure { margin: 0; padding: 0; }
+ul, ol { list-style: none; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+code { font-family: var(--font-mono); }
+
+/* hidden 必须压得住 .stage / .intro 的 display:grid */
+[hidden] { display: none !important; }
+
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ---------- 滚动条 ---------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 99px;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--ink-faint); }
+
+/* ---------- 焦点可见 ---------- */
+:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 3px;
+}
+
+/* ============================================================
+ * 按钮
+ * ============================================================ */
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 22px;
+  border-radius: 999px;
+  font-size: 14px;
+  letter-spacing: .04em;
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, .04);
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-mid) var(--ease-out);
+  will-change: transform;
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, .09);
+  border-color: var(--accent-soft);
+  transform: translateY(-1px);
+}
+
+.btn:active { transform: translateY(1px) scale(.985); }
+
+.btn:disabled {
+  opacity: .38;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn--primary {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--accent), var(--glow));
+  box-shadow:
+    0 6px 24px -8px var(--accent),
+    inset 0 1px 0 rgba(255, 255, 255, .28);
+}
+.btn--primary:hover {
+  background: linear-gradient(135deg, var(--accent), var(--glow));
+  filter: brightness(1.08);
+  box-shadow:
+    0 10px 32px -8px var(--accent),
+    inset 0 1px 0 rgba(255, 255, 255, .34);
+}
+
+.btn--ghost {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--ink-dim);
+}
+.btn--ghost:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, .05);
+}
+
+.btn--tiny {
+  padding: 5px 13px;
+  font-size: 12px;
+  border-radius: 999px;
+  border-color: var(--line);
+  color: var(--ink-dim);
+}
+
+/* ============================================================
+ * 分段控件（人数选择）
+ * ============================================================ */
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, .22);
+}
+
+.seg button {
+  min-width: 40px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--ink-dim);
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+
+.seg button:hover { color: var(--ink); }
+
+.seg button[aria-pressed="true"] {
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--glow));
+  box-shadow: 0 3px 14px -6px var(--accent);
+}
+
+/* ---------- 字段标签 ---------- */
+.field-label {
+  font-size: 12px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* ============================================================
+ * 通用面板 / 玻璃
+ * ============================================================ */
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-lg);
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+}
+
+/* ============================================================
+ * 轻提示
+ * ============================================================ */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 40px;
+  transform: translate(-50%, 16px);
+  z-index: 90;
+  padding: 10px 22px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--ink);
+  background: rgba(10, 6, 16, .88);
+  border: 1px solid var(--line-strong);
+  backdrop-filter: blur(12px);
+  opacity: 0;
+  transition: opacity var(--dur-mid) var(--ease-out), transform var(--dur-mid) var(--ease-out);
+  pointer-events: none;
+}
+.toast[data-show="1"] {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ============================================================
+ * 减弱动效偏好
+ * ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

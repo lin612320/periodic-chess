@@ -1,0 +1,841 @@
+/* ============================================================
+ * main.js — 控制器
+ * 三种模式共用一套渲染：
+ *   solo   单机/人机：本机既判定也渲染
+ *   host   联机房主：本机判定，事件流广播给客机
+ *   client 联机客机：只回放事件流，发意图不改状态
+ * ============================================================ */
+(function (global) {
+  'use strict';
+
+  var D = global.EPF.data;
+  var E = global.EPF.engine;
+  var V = global.EPF.view;
+  var U = global.EPF.ui;
+  var N = global.EPF.net;
+  var Fx = global.EPF.fx;
+
+  /* =========================================================
+   * 状态
+   * ======================================================= */
+  var cfg = {
+    themeId: 'reaction',
+    count: 2,
+    seats: [],
+    speed: 1
+  };
+
+  var mode = 'solo';           // solo | host | client
+  var state = null;
+  var busy = false;
+  var pendingAction = null;    // { playerId, resolve }
+  var pendingDuel = null;      // { challengerId, candidates, resolve }
+  var ambientTimer = null;
+  var ambientIdx = 0;
+
+  function isHostLike() { return mode === 'solo' || mode === 'host'; }
+  function isClient() { return mode === 'client'; }
+
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  function seatDefaults(n) {
+    var arr = [];
+    for (var i = 0; i < n; i++) {
+      arr.push({ name: E.PLAYER_NAMES[i], color: E.PLAYER_COLORS[i], isBot: i > 0 });
+    }
+    return arr;
+  }
+
+  function resizeSeats(n) {
+    var cur = cfg.seats;
+    var next = seatDefaults(n);
+    for (var i = 0; i < n && i < cur.length; i++) {
+      next[i].name = cur[i].name;
+      next[i].isBot = cur[i].isBot;
+      next[i].color = E.PLAYER_COLORS[i];
+    }
+    cfg.seats = next;
+  }
+
+  function applyTheme(id) {
+    cfg.themeId = id;
+    document.body.dataset.theme = id;
+    var t = null;
+    for (var i = 0; i < D.THEMES.length; i++) {
+      if (D.THEMES[i].id === id) { t = D.THEMES[i]; break; }
+    }
+    if (t) U.setThemeChrome(t);
+    return t;
+  }
+
+  /* =========================================================
+   * 开场装配
+   * ======================================================= */
+  function bootIntro() {
+    U.init();
+
+    Fx.init({
+      canvas: document.getElementById('fx'),
+      halo: document.getElementById('halo'),
+      card: document.getElementById('elemCard')
+    });
+
+    cfg.seats = seatDefaults(cfg.count);
+
+    U.renderThemeCards(cfg.themeId, function (id) {
+      applyTheme(id);
+      U.markThemeCard(id);
+    });
+
+    U.markCount(cfg.count);
+    U.renderSeats(cfg.seats);
+
+    U.dom.countSeg.addEventListener('click', function (ev) {
+      var b = ev.target.closest('button[data-count]');
+      if (!b) return;
+      var n = Number(b.dataset.count);
+      if (n === cfg.count) return;
+      cfg.count = n;
+      resizeSeats(n);
+      U.markCount(n);
+      U.renderSeats(cfg.seats);
+    });
+
+    document.getElementById('btnStart').addEventListener('click', startSolo);
+    document.getElementById('btnRules').addEventListener('click', U.showRules);
+    document.getElementById('btnLan').addEventListener('click', openLanPanel);
+    document.getElementById('btnMenu').addEventListener('click', openMenu);
+
+    U.dom.btnRoll.addEventListener('click', function () {
+      var p = state ? E.currentPlayer(state) : null;
+      if (!p) return;
+
+      if (isClient()) {
+        if (p.id !== N.me.seat) return;   // 不是自己的回合
+        N.intent('roll');
+        return;
+      }
+      fulfillAction(p.id);
+    });
+
+    window.addEventListener('resize', debounce(function () { V.relayout(); }, 140));
+
+    bindNet();
+    bindSound();
+
+    applyTheme(cfg.themeId);
+    startAmbient();
+
+    /* 先走一遍序章，再交出设置面板 */
+    global.EPF.prologue.start({
+      onDone: function () {
+        U.dom.intro.hidden = false;
+        U.dom.intro.style.animation = 'none';
+        void U.dom.intro.offsetWidth;
+        U.dom.intro.style.animation = '';
+      }
+    });
+  }
+
+  function debounce(fn, ms) {
+    var t = null;
+    return function () { clearTimeout(t); t = setTimeout(fn, ms); };
+  }
+
+  /* =========================================================
+   * 环境字条
+   * ======================================================= */
+  function startAmbient() {
+    clearInterval(ambientTimer);
+    ambientTimer = setInterval(function () {
+      if (U.dom.stage && !U.dom.stage.hidden) {
+        ambientIdx = (ambientIdx + 1) % D.AMBIENT_LINES.length;
+        U.setAmbient(D.AMBIENT_LINES[ambientIdx]);
+      }
+    }, 9000);
+  }
+
+  /* =========================================================
+   * 局域网面板
+   * ======================================================= */
+  /* 有些环境（file:// / 隐私模式）会禁用 sessionStorage，读写都要兜住 */
+  function storeGet(k) {
+    try { return sessionStorage.getItem(k); } catch (e) { return null; }
+  }
+  function storeSet(k, v) {
+    try { sessionStorage.setItem(k, v); } catch (e) { /* 忽略 */ }
+  }
+
+  function openLanPanel() {
+    var randRoom = String(Math.floor(1000 + Math.random() * 9000));
+    var lastRoom = storeGet('epf.room') || randRoom;
+    var lastName = storeGet('epf.name') || '';
+
+    var html = ''
+      + '<p class="modal__kicker">局域网联机</p>'
+      + '<h3 class="modal__title">同一间教室</h3>'
+      + '<div class="modal__body">'
+      + '<p>房间码一样的人就在同一局里。第一个进房间的人是房主，随机数和判定都由房主算。</p>'
+      + '</div>'
+      + '<div class="lan-form">'
+      + '<label class="lan-field"><span>房间码</span>'
+      + '<input id="lanRoom" maxlength="8" value="' + lastRoom + '" autocomplete="off"></label>'
+      + '<label class="lan-field"><span>昵称</span>'
+      + '<input id="lanName" maxlength="12" value="' + lastName + '" placeholder="随便取一个" autocomplete="off"></label>'
+      + '</div>'
+      + '<div class="lan-status" id="lanStatus"></div>'
+      + '<div class="modal__actions">'
+      + '<button type="button" class="btn btn--ghost" data-act="close">算了</button>'
+      + '<button type="button" class="btn btn--primary" data-act="join">进教室</button>'
+      + '</div>';
+
+    var box = U.showModal(html);
+    var status = box.querySelector('#lanStatus');
+
+    box.querySelector('[data-act="close"]').addEventListener('click', function () {
+      N.disconnect();
+      mode = 'solo';
+      U.hideModal();
+    });
+
+    box.querySelector('[data-act="join"]').addEventListener('click', function () {
+      var room = box.querySelector('#lanRoom').value.trim().toUpperCase();
+      var name = box.querySelector('#lanName').value.trim() || '玩家';
+      if (!room) { status.textContent = '房间码不能空着'; return; }
+
+      storeSet('epf.room', room);
+      storeSet('epf.name', name);
+      status.textContent = '正在连…';
+
+      N.connect({ room: room, name: name })
+        .then(function () { return N.join(room, name); })
+        .then(function () {
+          status.textContent = '已进房间，等房主开局';
+        })
+        .catch(function (err) {
+          status.textContent = err.message || '连不上';
+        });
+    });
+  }
+
+  /* =========================================================
+   * 网络事件
+   * ======================================================= */
+  function bindNet() {
+    N.on('room', function (info) {
+      var box = U.dom.modalBox;
+      var status = box.querySelector('#lanStatus');
+      if (status) {
+        var names = info.roster.map(function (r, i) {
+          return (i === 0 ? '★ ' : '') + r.name;
+        }).join('、');
+        status.textContent = (info.isHost ? '你是房主' : '你是第 ' + (info.seat + 1) + ' 位') +
+          '　房间 ' + info.room + '　成员：' + names;
+
+        if (info.roster.length >= 2) {
+          var actions = box.querySelector('.modal__actions');
+          if (actions) {
+            var go = actions.querySelector('[data-act="go"]');
+            if (!go) {
+              go = document.createElement('button');
+              go.type = 'button';
+              go.className = 'btn btn--primary';
+              go.dataset.act = 'go';
+              go.addEventListener('click', hostStartLan);
+              actions.insertBefore(go, actions.firstChild);
+            }
+            // 每次 roster 变化都要同步：谁是房主可能已经变了
+            go.disabled = !info.isHost;
+            go.textContent = info.isHost ? '开局（房主）' : '等房主开局…';
+          }
+        } else if (box.querySelector('[data-act="go"]')) {
+          box.querySelector('[data-act="go"]').remove();
+        }
+      }
+    });
+
+    N.on('start', function (msg) {
+      if (mode === 'host') return;      // 房主自己发的，忽略
+      mode = 'client';                  // 收到 start 才切模式，别在守卫里挡自己
+      U.hideModal();
+      clientJoinStage(msg);
+    });
+
+    N.on('events', function (events) {
+      if (!isClient()) return;
+      playEvents(events).then(syncClientUI);
+    });
+
+    N.on('intent', function (msg) {
+      if (!isHostLike() || mode !== 'host') return;
+      var seat = -1;
+      for (var i = 0; i < N.me.roster.length; i++) {
+        if (N.me.roster[i].connId === msg.from) { seat = i; break; }
+      }
+      if (seat < 0) return;
+
+      if (msg.kind === 'roll') {
+        fulfillAction(seat);
+      } else if (msg.kind === 'duel') {
+        if (pendingDuel && pendingDuel.challengerId === seat) {
+          var r = pendingDuel.resolve;
+          pendingDuel = null;
+          r(msg.payload && typeof msg.payload.target === 'number' ? msg.payload.target : null);
+        }
+      }
+    });
+
+    N.on('duel-request', function (msg) {
+      if (!isClient()) return;
+      if (msg.player !== N.me.seat) return;
+      U.showDuelPicker(msg.candidates, state.players, function (targetId) {
+        N.intent('duel', { target: targetId });
+      });
+    });
+
+    N.on('closed', function () {
+      if (isClient() || mode === 'host') {
+        U.toast('连接断开了');
+        mode = 'solo';
+      }
+    });
+  }
+
+  function hostStartLan() {
+    var roster = N.me.roster || [];
+    if (roster.length < 2) { U.toast('至少两个人'); return; }
+
+    var names = roster.map(function (r) { return r.name; });
+    mode = 'host';
+    U.hideModal();
+
+    buildGame({
+      count: roster.length,
+      bots: [],
+      names: names
+    }, function () {
+      N.start({ themeId: cfg.themeId }, N.pack(state));
+      busy = false;
+      nextTick(turnLoop);
+    });
+  }
+
+  function clientJoinStage(msg) {
+    mode = 'client';
+    if (msg.config && msg.config.themeId) {
+      applyTheme(msg.config.themeId);
+    }
+    var snap = msg.snapshot;
+    if (!snap) return;
+
+    state = N.unpack(snap);
+    U.enterStage();
+    V.init({ board: U.dom.board, speed: cfg.speed });
+    V.buildTokens(state.players);
+
+    Fx.setStageMode(true);
+    Fx.bindBoard(U.dom.board);
+    Fx.refreshParallax();
+
+    U.clearLog();
+    U.lcdReset();
+    U.renderPlayers(state.players, state.turn);
+
+    var first = state.players[state.turn];
+    U.setTurn(first);
+    V.setCurrent(first.pos);
+    V.markActive(first.id);
+    U.log('连线成功，房间 ' + N.me.room + '，共 ' + state.players.length + ' 人。', 'turn');
+    syncClientUI();
+  }
+
+  function syncClientUI() {
+    if (!state) return;
+    var p = state.players[state.turn];
+    U.setTurn(p);
+    U.setActive(state.players, p.id);
+    V.markActive(p.id);
+    V.setCurrent(p.pos);
+    state.players.forEach(function (q) { U.updatePlayer(q); });
+
+    var mine = (p.id === N.me.seat);
+    U.setRollState(mine && state.phase !== 'over' ? 'ready' : 'wait');
+    if (state.phase === 'over' && state.winner) {
+      U.setRollState('off');
+      onWin();
+    }
+  }
+
+  /* =========================================================
+   * 开局
+   * ======================================================= */
+  function startSolo() {
+    var bots = [];
+    var names = [];
+    cfg.seats.forEach(function (s, i) {
+      if (s.isBot) bots.push(i);
+      names.push(s.name);
+    });
+    mode = 'solo';
+    buildGame({ count: cfg.count, bots: bots, names: names }, function () {
+      busy = false;
+      nextTick(turnLoop);
+    });
+  }
+
+  function buildGame(opts, done) {
+    try {
+      state = E.createGame(opts);
+
+      U.enterStage();
+      V.init({ board: U.dom.board, speed: cfg.speed });
+      V.buildTokens(state.players);
+
+      Fx.setStageMode(true);
+      Fx.bindBoard(U.dom.board);
+      Fx.refreshParallax();
+
+      U.clearLog();
+      U.lcdReset();
+      U.renderPlayers(state.players, state.turn);
+
+      var first = E.currentPlayer(state);
+      U.setTurn(first);
+      V.setCurrent(first.pos);
+      V.markActive(first.id);
+      U.setAmbient(D.AMBIENT_LINES[0]);
+      U.log('翻开课本，<b>1 号氢</b>出发。', 'turn');
+
+      if (done) done();
+    } catch (err) {
+      console.error('[buildGame] 开局失败', err);
+      U.toast('开局炸了，看控制台');
+    }
+  }
+
+  function nextTick(fn) {
+    setTimeout(function () {
+      fn().catch(function (err) {
+        console.error('[turn flow]', err);
+        U.toast('流程出错，看控制台');
+        busy = false;
+      });
+    }, 260);
+  }
+
+  /* =========================================================
+   * 动作等待（本地点击 / 远程 intent 统一）
+   * ======================================================= */
+  function waitAction(playerId) {
+    return new Promise(function (resolve) {
+      pendingAction = { playerId: playerId, resolve: resolve };
+    });
+  }
+
+  function fulfillAction(playerId) {
+    if (!pendingAction) return;
+    if (pendingAction.playerId !== playerId) return;
+    var r = pendingAction.resolve;
+    pendingAction = null;
+    r();
+  }
+
+  /* =========================================================
+   * 回合主循环（仅 solo / host）
+   * ======================================================= */
+  async function turnLoop() {
+    if (!isHostLike()) return;
+    if (!state || state.phase === 'over' || busy) return;
+    busy = true;
+
+    var p = E.currentPlayer(state);
+    U.setTurn(p);
+    U.setActive(state.players, p.id);
+    V.markActive(p.id);
+    V.setCurrent(p.pos);
+
+    var bt = E.beginTurn(state);
+    await playEvents(bt.events, { relay: true });
+
+    if (bt.skipped) {
+      refreshPanels();
+      return endTurnFlow();
+    }
+
+    var chain = 0;
+    while (true) {
+      if (state.phase === 'over') break;
+
+      if (p.isBot) {
+        U.setRollState('wait');
+        await sleep(620);
+      } else {
+        // 联机时只有房主本人（座位 0）用本机按钮，其余是远程人类
+        var isLocalHuman = (mode === 'solo') || (p.id === 0);
+        U.setRollState(isLocalHuman ? 'ready' : 'wait');
+        if (chain > 0 && isLocalHuman) U.lcdMessage('再来一次', '再按 RAN');
+        await waitAction(p.id);
+      }
+
+      U.setRollState('busy');
+
+      var res = E.rollAndMove(state);
+      await playEvents(res.events, { relay: true });
+
+      if (state.phase === 'over') { busy = false; return onWin(); }
+
+      if (res.needsDuel) {
+        await handleDuel(p, res.candidates);
+        if (state.phase === 'over') { busy = false; return onWin(); }
+      }
+
+      if (res.again && chain < 8) { chain++; continue; }
+      break;
+    }
+
+    refreshPanels();
+    endTurnFlow();
+  }
+
+  function endTurnFlow() {
+    var evs = E.endTurn(state);
+    return playEvents(evs, { relay: true }).then(function () {
+      var p = E.currentPlayer(state);
+      U.setTurn(p);
+      U.setActive(state.players, p.id);
+      V.markActive(p.id);
+      V.setCurrent(p.pos);
+      refreshPanels();
+      busy = false;
+      nextTick(turnLoop);
+    });
+  }
+
+  function refreshPanels() {
+    if (!state) return;
+    state.players.forEach(function (p) { U.updatePlayer(p); });
+  }
+
+  /* =========================================================
+   * 事件流播放
+   * ======================================================= */
+  async function playEvents(events, opts) {
+    opts = opts || {};
+    if (opts.relay && mode === 'host' && N.active) {
+      N.broadcast(events);
+    }
+    for (var i = 0; i < events.length; i++) {
+      var ev = events[i];
+      if (isClient()) N.applyEvent(state, ev);   // 客机影子状态
+      try {
+        await playOne(ev);
+      } catch (err) {
+        console.error('[playEvents] 事件播放失败', ev.type, err);
+      }
+    }
+  }
+
+  function playerOf(id) { return state.players[id]; }
+
+  function arrowWord(dir) {
+    return ({ up: '↑', down: '↓', left: '←', right: '→' })[dir] || '→';
+  }
+
+  async function playOne(ev) {
+    switch (ev.type) {
+
+      case 'roll': {
+        var p0 = playerOf(ev.player);
+        U.log('<b>' + p0.name + '</b> 按 RAN → <b>' + ev.value + '</b>', 'roll');
+        await U.animateRoll(ev);
+        break;
+      }
+
+      case 'move': {
+        U.setRollState('busy');
+        await V.moveAlong(ev.player, ev.path);
+        V.markTarget(ev.to);
+        V.landBounce(ev.player);
+        V.flashCell(ev.to, 'is-impact', 520);
+        U.updatePlayer(playerOf(ev.player));
+        await sleep(120);
+        break;
+      }
+
+      case 'land': {
+        if (ev.special) V.flashCell(ev.z, 'is-impact', 460);
+        break;
+      }
+
+      case 'special': {
+        U.log(ev.text, 'special');
+        await sleep(180);
+        break;
+      }
+
+      case 'sleep': {
+        U.log(ev.text, 'special');
+        U.updatePlayer(playerOf(ev.player));
+        await sleep(320);
+        break;
+      }
+
+      case 'wake':
+      case 'skip': {
+        U.log(ev.text, 'turn');
+        await sleep(300);
+        break;
+      }
+
+      case 'again':
+      case 'again-stop': {
+        U.log(ev.text, 'special');
+        await sleep(260);
+        break;
+      }
+
+      case 'tornado': {
+        U.log('<b>' + playerOf(ev.player).name + '</b> 被卷走了：<b>' + ev.value + '</b> 号', 'special');
+        await U.animateTornado(ev);
+        V.setTokenPos(ev.player, ev.from, { hop: true });
+        await sleep(160);
+        V.setTokenPos(ev.player, ev.to, { hop: true });
+        V.followCell(ev.to);
+        V.markTarget(ev.to);
+        V.flashCell(ev.to, 'is-impact', 620);
+        V.landBounce(ev.player);
+        U.updatePlayer(playerOf(ev.player));
+        await sleep(520);
+        break;
+      }
+
+      case 'arrow': {
+        U.log('<b>' + playerOf(ev.player).name + '</b> 走 ' + arrowWord(ev.dir) + ' → <b>' + ev.to + '</b> 号', 'special');
+        V.setTokenPos(ev.player, ev.to, { hop: true });
+        V.followCell(ev.to);
+        V.markTarget(ev.to);
+        V.flashCell(ev.to, 'is-impact', 520);
+        V.landBounce(ev.player);
+        U.updatePlayer(playerOf(ev.player));
+        await sleep(480);
+        break;
+      }
+
+      case 'arrow-blocked': {
+        U.log(ev.text, 'special');
+        V.flashCell(ev.z, 'is-impact', 380);
+        await sleep(360);
+        break;
+      }
+
+      case 'duel': {
+        await U.animateDuel(ev.rolls, state.players, ev.threshold);
+        U.log('<b>' + playerOf(ev.winner).name + '</b> 赢下决斗，<b>' + playerOf(ev.loser).name + '</b> 停一回合', 'duel');
+        U.updatePlayer(playerOf(ev.loser));
+        await sleep(600);
+        break;
+      }
+
+      case 'duel-skip': {
+        U.log(ev.text, 'special');
+        await sleep(280);
+        break;
+      }
+
+      case 'win': {
+        U.log('<b>' + ev.text + '</b>', 'win');
+        break;
+      }
+
+      case 'turn': {
+        U.log(ev.text, 'turn');
+        await sleep(180);
+        break;
+      }
+
+      default: {
+        if (ev.text) U.log(ev.text, 'turn');
+        break;
+      }
+    }
+  }
+
+  /* =========================================================
+   * 决斗
+   * ======================================================= */
+  function handleDuel(challenger, candidates) {
+    return new Promise(function (resolve) {
+      // 1) 人机：直接选领先者
+      if (challenger.isBot) {
+        var t = E.botPickDuelTarget(state, challenger.id);
+        if (t == null) { resolve(); return; }
+        var r1 = E.resolveDuel(state, challenger.id, t);
+        playEvents(r1.events, { relay: true }).then(resolve);
+        return;
+      }
+
+      // 2) 本地人类：弹窗
+      if (mode === 'solo' || challenger.id === 0) {
+        U.showDuelPicker(candidates, state.players, function (targetId) {
+          var r2 = E.resolveDuel(state, challenger.id, targetId);
+          playEvents(r2.events, { relay: true }).then(resolve);
+        });
+        return;
+      }
+
+      // 3) 联机：远程玩家自己选
+      if (mode === 'host' && N.active) {
+        N.relayRaw({ t: 'duel-request', player: challenger.id, candidates: candidates });
+        pendingDuel = {
+          challengerId: challenger.id,
+          candidates: candidates,
+          resolve: function (targetId) {
+            var pick = (typeof targetId === 'number') ? targetId : E.botPickDuelTarget(state, challenger.id);
+            if (pick == null) { resolve(); return; }
+            var r3 = E.resolveDuel(state, challenger.id, pick);
+            playEvents(r3.events, { relay: true }).then(resolve);
+          }
+        };
+        return;
+      }
+
+      resolve();
+    });
+  }
+
+  /* =========================================================
+   * 结算
+   * ======================================================= */
+  function onWin() {
+    if (!state || !state.winner) return;
+    var w = state.winner;
+
+    U.setRollState('off');
+    U.setTurn(w);
+    V.markActive(w.id);
+
+    setTimeout(function () {
+      U.showResult(w, state.players,
+        function () {
+          if (isClient()) { U.toast('等房主开新局'); return; }
+          if (mode === 'host') { U.toast('等房主开新局'); U.hideModal(); return; }
+          startSolo();
+        },
+        function () {
+          goIntro();
+          if (mode === 'host') { mode = 'solo'; }
+        }
+      );
+    }, 620);
+  }
+
+  function goIntro() {
+    U.backToIntro();
+    Fx.setStageMode(false);
+    busy = false;
+    pendingAction = null;
+  }
+
+  /* =========================================================
+   * 菜单
+   * ======================================================= */
+  function openMenu() {
+    var themeTitle = (applyTheme(cfg.themeId) || {}).title || '';
+    var html = ''
+      + '<p class="modal__kicker">菜单</p>'
+      + '<h3 class="modal__title">先停一停</h3>'
+      + '<div class="modal__body"><p>当前课本：' + themeTitle
+      + (mode === 'solo' ? '' : '　·　联机模式：' + (mode === 'host' ? '房主' : '客机')) + '</p></div>'
+      + '<div class="modal__actions">'
+      + '<button type="button" class="btn btn--ghost" data-act="rules">规则</button>'
+      + '<button type="button" class="btn btn--ghost" data-act="speed">动画速度 ×' + cfg.speed + '</button>'
+      + '<button type="button" class="btn btn--ghost" data-act="menu">回到开场</button>'
+      + '<button type="button" class="btn btn--primary" data-act="restart">重开一局</button>'
+      + '</div>';
+
+    var box = U.showModal(html);
+
+    box.querySelector('[data-act="rules"]').addEventListener('click', function () {
+      U.hideModal();
+      U.showRules();
+    });
+
+    box.querySelector('[data-act="speed"]').addEventListener('click', function (e) {
+      var seq = [1, 1.5, 2, 3];
+      var idx = seq.indexOf(cfg.speed);
+      cfg.speed = seq[(idx + 1) % seq.length];
+      V.setSpeed(cfg.speed);
+      e.target.textContent = '动画速度 ×' + cfg.speed;
+    });
+
+    box.querySelector('[data-act="menu"]').addEventListener('click', function () {
+      goIntro();
+      if (mode !== 'solo') { N.disconnect(); mode = 'solo'; }
+    });
+
+    box.querySelector('[data-act="restart"]').addEventListener('click', function () {
+      U.hideModal();
+      busy = false;
+      pendingAction = null;
+      if (isClient()) { U.toast('等房主开新局'); return; }
+      if (mode === 'host') { hostStartLan(); return; }
+      startSolo();
+    });
+  }
+
+  /* =========================================================
+   * 声音
+   * ======================================================= */
+  function bindSound() {
+    var Au = global.EPF.audio;
+    var b1 = document.getElementById('btnSound');
+    var b2 = document.getElementById('btnSound2');
+    if (!Au) return;
+
+    function paint() {
+      var info = Au.info();
+      var on = info.on;
+      if (b1) {
+        b1.setAttribute('aria-pressed', on ? 'true' : 'false');
+        var label = b1.querySelector('.snd-label');
+        if (label) {
+          label.textContent = on
+            ? (info.mode === 'files' && info.currentTitle ? '♪ ' + info.currentTitle : '声音：开')
+            : '声音：关';
+        }
+      }
+      if (b2) b2.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+
+    function hit() {
+      try {
+        Au.toggle();
+      } catch (err) {
+        console.error('[sound] 切换失败', err);
+        U.toast('这台机器放不出声音');
+      }
+      paint();
+    }
+
+    if (b1) b1.addEventListener('click', hit);
+    if (b2) b2.addEventListener('click', hit);
+    Au.onChange(paint);
+    paint();
+  }
+
+  /* =========================================================
+   * 启动
+   * ======================================================= */
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootIntro);
+  } else {
+    bootIntro();
+  }
+
+  global.EPF.app = {
+    get state() { return state; },
+    get mode() { return mode; },
+    startGame: startSolo,
+    config: cfg
+  };
+})(window);
