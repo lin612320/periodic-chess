@@ -1,0 +1,7 @@
+# 打包产物 / 截图 / 压缩包不进仓库
+deploy/
+tools/shots/
+*.zip
+node_modules/
+.DS_Store
+Thumbs.db

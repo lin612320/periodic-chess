@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>元素周期表飞行棋 · 118 格的那个傍晚</title>
+<link rel="stylesheet" href="styles/base.css">
+<link rel="stylesheet" href="styles/scene.css">
+<link rel="stylesheet" href="styles/prologue.css">
+<link rel="stylesheet" href="styles/board.css">
+<link rel="stylesheet" href="styles/hud.css">
+<link rel="stylesheet" href="styles/fx.css">
+</head>
+<body data-theme="reaction">
+
+<!-- ============================================================
+     氛围层：夕阳 / 窗影 / 窗帘 / 纸纹 / 颗粒 / 扫描线
+     ============================================================ -->
+<div class="scene" aria-hidden="true">
+  <div class="sky"></div>
+  <div class="sun"></div>
+  <div class="haze"></div>
+  <div class="window-shadow"></div>
+  <div class="curtain curtain--l"></div>
+  <div class="curtain curtain--r"></div>
+  <div class="paper"></div>
+  <div class="grain"></div>
+  <div class="scanlines"></div>
+  <div class="vignette"></div>
+</div>
+
+<!-- 交互特效层 -->
+<canvas id="fx" aria-hidden="true"></canvas>
+<div class="halo" id="halo" aria-hidden="true"></div>
+<div class="ecard" id="elemCard" hidden aria-live="polite"></div>
+
+<!-- ============================================================
+     序章：六幕，把那个傍晚走一遍
+     ============================================================ -->
+<section id="prologue" class="prologue" aria-label="序章">
+  <div class="prologue__dust" aria-hidden="true"></div>
+  <div class="prologue__vig" aria-hidden="true"></div>
+
+  <div class="prologue__stage" id="prologueStage">
+
+    <!-- 幕 1：把人群拨开 -->
+    <article class="act" data-act="0" data-hint="把人群拨开">
+      <div class="art art--gate" aria-hidden="true">
+        <div class="gate">
+          <span class="gate__beam"></span>
+          <span class="gate__pillar gate__pillar--l"></span>
+          <span class="gate__pillar gate__pillar--r"></span>
+        </div>
+        <div class="crowd" id="crowd"></div>
+        <div class="ground"></div>
+      </div>
+      <div class="act__text">
+        <p class="act__line"><span>五点四十，铃响过第二遍。</span></p>
+        <p class="act__line"><span>人群从教学楼里涌出来，</span></p>
+        <p class="act__line"><span>又在校门口散成一个个方向。</span></p>
+      </div>
+    </article>
+
+    <!-- 幕 2：鼠标就是太阳 -->
+    <article class="act" data-act="1" data-hint="左右移动 —— 你在控制太阳">
+      <div class="art art--shadow" aria-hidden="true">
+        <div class="sunball" id="sunball"></div>
+        <div class="shadows" id="shadows"></div>
+        <div class="ground"></div>
+      </div>
+      <div class="act__text">
+        <p class="act__line"><span>广播里那首歌，谁都会哼，</span></p>
+        <p class="act__line"><span>谁也叫不出名字。</span></p>
+        <p class="act__line"><span>夕阳把校道上梧桐的影子拉得很长，</span></p>
+        <p class="act__line"><span>一直铺到食堂门口。</span></p>
+      </div>
+    </article>
+
+    <!-- 幕 3：翻纸袋 -->
+    <article class="act" data-act="2" data-hint="翻一翻，今天吃哪个">
+      <div class="art art--bags" aria-hidden="true">
+        <button type="button" class="bag" data-label="煎饼果子"><span class="bag__inner"></span></button>
+        <button type="button" class="bag" data-label="稻稻香饭团"><span class="bag__inner"></span></button>
+        <button type="button" class="bag" data-label="实惠快餐"><span class="bag__inner"></span></button>
+      </div>
+      <div class="act__text">
+        <p class="act__line"><span>今天是饱饭坑的煎饼果子，</span></p>
+        <p class="act__line"><span>昨天是稻稻香饭团，</span></p>
+        <p class="act__line"><span>前天是实惠快餐。</span></p>
+      </div>
+    </article>
+
+    <!-- 幕 4：把灯点起来 -->
+    <article class="act" data-act="3" data-hint="划过去，把灯一盏盏点起来">
+      <div class="art art--seats" aria-hidden="true">
+        <div class="classroom" id="classroom"></div>
+      </div>
+      <div class="act__text">
+        <p class="act__line"><span>你提着纸袋往教室走。</span></p>
+        <p class="act__line"><span>这个点，大半座位是空的——</span></p>
+        <p class="act__line"><span>有人去吃饭，有人去打球，</span></p>
+        <p class="act__line"><span>也总有几个还低着头。</span></p>
+      </div>
+    </article>
+
+    <!-- 幕 5：推门 -->
+    <article class="act" data-act="4" data-hint="把门推开">
+      <div class="art art--door" aria-hidden="true">
+        <div class="door" id="door">
+          <span class="door__light"></span>
+          <span class="door__leaf door__leaf--l"></span>
+          <span class="door__leaf door__leaf--r"></span>
+        </div>
+        <div class="door-hint">← 按住往两边推</div>
+      </div>
+      <div class="act__text">
+        <p class="act__line"><span>推门进去，灯还没开。</span></p>
+        <p class="act__line"><span>靠窗那排，lyx 已经把饭盒摊开了。</span></p>
+        <p class="act__line"><span>你走过去，忽然想起来点什么。</span></p>
+      </div>
+    </article>
+
+    <!-- 幕 6：真的按下 RAN -->
+    <article class="act" data-act="5" data-hint="按一下 RAN">
+      <div class="art art--calc" aria-hidden="true">
+        <div class="calc" id="calcBody">
+          <div class="calc__screen"><span id="proLcd">RAN</span></div>
+          <div class="calc__pad">
+            <span class="calc__ghost"></span>
+            <span class="calc__ghost"></span>
+            <button type="button" class="calc__key" id="proRan" aria-label="按下 RAN 键">RAN</button>
+          </div>
+        </div>
+      </div>
+      <div class="act__text">
+        <p class="act__line"><span>摸出《化学反应原理》，翻到最后一页，</span></p>
+        <p class="act__line"><span>又摸出那台按键有点松的科学计算器。</span></p>
+        <p class="act__line act__line--big"><span>六个面，就是 <code>6×RAN+0.5</code>。</span></p>
+        <p class="act__line act__line--big"><span>棋盘，是 118 个元素。</span></p>
+      </div>
+    </article>
+
+  </div>
+
+  <div class="prologue__bar">
+    <span class="prologue__dots" id="prologueDots"></span>
+    <button type="button" class="prologue__snd" id="prologueSnd"
+            aria-pressed="false" aria-label="序章音景">
+      <span class="snd-bars" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span id="prologueSndLabel">声音：关</span>
+    </button>
+    <button type="button" class="prologue__skip" id="prologueSkip">跳过序章</button>
+  </div>
+
+  <button type="button" class="prologue__next" id="prologueNext" aria-label="继续">
+    <span id="prologueHint">轻触继续</span>
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path d="M5 12h13M12 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="1.6"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+</section>
+
+<!-- ============================================================
+     开场：背景故事 + 封面选择 + 开局设置
+     ============================================================ -->
+<section id="intro" class="intro" hidden>
+  <div class="intro__inner">
+
+    <header class="intro__head">
+      <p class="intro__kicker">高三 · 傍晚 17:40</p>
+      <h1 class="intro__title">元素周期表<br><em>飞行棋</em></h1>
+      <p class="intro__sub">从 1 号氢，走到 118 号鿫</p>
+    </header>
+
+    <div class="intro__story">
+      <p>傍晚五点四十，你结束了一整天的课。</p>
+      <p>窗外是橙色的，广播里放着谁都会哼的那首歌。你随人群走出校门——今天是饱饭坑的煎饼果子，昨天是稻稻香饭团，前天是实惠快餐。</p>
+      <p>你习惯把饭打包带进教室。这个点，很多人去吃饭、去打球，也偶有人留在座位上继续刷题。</p>
+      <p>你提着煎饼果子，看见对面坐着端着饭盒的 lyx，灵机一动，摸出《化学反应原理》翻到最后一页，又掏出那台按键已经松松垮垮的科学计算器。</p>
+      <p class="intro__story-hi">六面骰子，就是一个 <code>6×RAN+0.5</code>。<br>棋盘，是 118 个元素。</p>
+    </div>
+
+    <div class="intro__theme">
+      <p class="field-label">选一本压在桌角的课本</p>
+      <div class="theme-cards" id="themeCards"><!-- JS 注入 --></div>
+    </div>
+
+    <div class="intro__setup">
+      <div class="setup-row">
+        <span class="field-label">人数</span>
+        <div class="seg" id="countSeg" role="group" aria-label="玩家人数">
+          <button type="button" data-count="2">2</button>
+          <button type="button" data-count="3">3</button>
+          <button type="button" data-count="4">4</button>
+        </div>
+      </div>
+
+      <div class="setup-row setup-row--seats">
+        <span class="field-label">座位</span>
+        <div class="seats" id="seats"><!-- JS 注入 --></div>
+      </div>
+    </div>
+
+    <div class="intro__actions">
+      <button type="button" class="btn btn--primary" id="btnStart">翻开课本，开局</button>
+      <button type="button" class="btn btn--ghost" id="btnRules">看规则</button>
+      <button type="button" class="btn btn--ghost" id="btnLan">局域网联机</button>
+      <button type="button" class="btn btn--ghost" id="btnSound" aria-pressed="false">
+        <span class="snd-dot" aria-hidden="true"></span>
+        <span class="snd-label">声音：关</span>
+      </button>
+    </div>
+
+    <p class="intro__hint">单机 / 人机无需联网，双击就能玩　·　音乐默认关着，点了才响</p>
+  </div>
+</section>
+
+<!-- ============================================================
+     主舞台
+     ============================================================ -->
+<main id="stage" class="stage" hidden>
+
+  <!-- 棋盘 -->
+  <div class="board-wrap">
+    <div class="board-head">
+      <div class="board-head__left">
+        <span class="board-head__tag" id="themeTag">选择性必修 1</span>
+        <h2 class="board-head__title" id="themeTitle">化学反应原理</h2>
+      </div>
+      <div class="board-head__right">
+        <span class="turn-pill" id="turnPill">轮到 你</span>
+        <button type="button" class="btn btn--tiny btn--sound" id="btnSound2"
+                aria-pressed="false" title="背景音乐">
+          <span class="snd-bars" aria-hidden="true"><i></i><i></i><i></i></span>
+        </button>
+        <button type="button" class="btn btn--tiny" id="btnMenu">菜单</button>
+      </div>
+    </div>
+
+    <div class="board-scroll">
+      <div class="board" id="board"><!-- JS 注入 --></div>
+    </div>
+
+    <div class="board-foot">
+      <div class="legend" id="legend"><!-- JS 注入 --></div>
+      <div class="ambient-line" id="ambientLine">傍晚五点四十，窗外是橙色的。</div>
+    </div>
+  </div>
+
+  <!-- 侧栏 -->
+  <aside class="rail">
+    <div class="rail__block">
+      <div class="rail__title">场上</div>
+      <ul class="players" id="players"><!-- JS 注入 --></ul>
+    </div>
+
+    <div class="rail__block rail__block--pad">
+      <div class="rail__title">科学计算器</div>
+      <div class="lcd" id="lcd">
+        <div class="lcd__line lcd__line--expr" id="lcdExpr">6×RAN+0.5</div>
+        <div class="lcd__line lcd__line--val" id="lcdVal">— — —</div>
+        <div class="lcd__line lcd__line--out" id="lcdOut">Rnd = ?</div>
+        <div class="lcd__glare" aria-hidden="true"></div>
+      </div>
+      <button type="button" class="btn btn--roll" id="btnRoll">
+        <span class="btn--roll__main">摇骰子</span>
+        <span class="btn--roll__sub">按 RAN</span>
+      </button>
+    </div>
+
+    <div class="rail__block rail__block--grow">
+      <div class="rail__title">晚自习手记</div>
+      <ol class="log" id="log"></ol>
+    </div>
+  </aside>
+</main>
+
+<!-- 弹窗层 -->
+<div id="modal" class="modal-layer" hidden>
+  <div class="modal" id="modalBox" role="dialog" aria-modal="true"></div>
+</div>
+
+<!-- 轻提示 -->
+<div id="toast" class="toast" hidden></div>
+
+<!-- ============================================================
+     脚本：经典 script，顺序加载，file:// 直接可跑
+     ============================================================ -->
+<script src="audio/tracks.js"></script>
+<script src="js/data.js"></script>
+<script src="js/element-info.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/view.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/prologue.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/prologue-audio.js"></script>
+<script src="js/turn-config.js"></script>
+<script src="js/vendor/peerjs.min.js"></script>
+<script src="js/p2p.js"></script>
+<script src="js/net.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

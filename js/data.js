@@ -1,0 +1,361 @@
+/* ============================================================
+ * data.js — 静态数据层
+ * 118 元素（序号 / 符号 / 中文名 / 周期表坐标 / 类别）
+ * 特殊格子分布 / 三套教材封面主题
+ * -----------------------------------------------------------
+ * 经典 script，挂在 window.EPF.data 上，勿用 ES module。
+ * ============================================================ */
+(function (global) {
+  'use strict';
+
+  /* ---------- 类别短码 ----------
+   * nm 非金属  hl 卤素  ng 稀有气体  am 碱金属  ae 碱土金属
+   * ml 准金属  pm 后过渡金属  tm 过渡金属  ln 镧系  an 锕系
+   *
+   * 坐标：row 1~7 为主表周期，row 8 = 镧系行，row 9 = 锕系行
+   *       col 1~18 即族号
+   */
+
+  var RAW = [
+    [1, 'H', '氢', 1, 1, 'nm'],
+    [2, 'He', '氦', 1, 18, 'ng'],
+    [3, 'Li', '锂', 2, 1, 'am'],
+    [4, 'Be', '铍', 2, 2, 'ae'],
+    [5, 'B', '硼', 2, 13, 'ml'],
+    [6, 'C', '碳', 2, 14, 'nm'],
+    [7, 'N', '氮', 2, 15, 'nm'],
+    [8, 'O', '氧', 2, 16, 'nm'],
+    [9, 'F', '氟', 2, 17, 'hl'],
+    [10, 'Ne', '氖', 2, 18, 'ng'],
+    [11, 'Na', '钠', 3, 1, 'am'],
+    [12, 'Mg', '镁', 3, 2, 'ae'],
+    [13, 'Al', '铝', 3, 13, 'pm'],
+    [14, 'Si', '硅', 3, 14, 'ml'],
+    [15, 'P', '磷', 3, 15, 'nm'],
+    [16, 'S', '硫', 3, 16, 'nm'],
+    [17, 'Cl', '氯', 3, 17, 'hl'],
+    [18, 'Ar', '氩', 3, 18, 'ng'],
+    [19, 'K', '钾', 4, 1, 'am'],
+    [20, 'Ca', '钙', 4, 2, 'ae'],
+    [21, 'Sc', '钪', 4, 3, 'tm'],
+    [22, 'Ti', '钛', 4, 4, 'tm'],
+    [23, 'V', '钒', 4, 5, 'tm'],
+    [24, 'Cr', '铬', 4, 6, 'tm'],
+    [25, 'Mn', '锰', 4, 7, 'tm'],
+    [26, 'Fe', '铁', 4, 8, 'tm'],
+    [27, 'Co', '钴', 4, 9, 'tm'],
+    [28, 'Ni', '镍', 4, 10, 'tm'],
+    [29, 'Cu', '铜', 4, 11, 'tm'],
+    [30, 'Zn', '锌', 4, 12, 'tm'],
+    [31, 'Ga', '镓', 4, 13, 'pm'],
+    [32, 'Ge', '锗', 4, 14, 'ml'],
+    [33, 'As', '砷', 4, 15, 'ml'],
+    [34, 'Se', '硒', 4, 16, 'nm'],
+    [35, 'Br', '溴', 4, 17, 'hl'],
+    [36, 'Kr', '氪', 4, 18, 'ng'],
+    [37, 'Rb', '铷', 5, 1, 'am'],
+    [38, 'Sr', '锶', 5, 2, 'ae'],
+    [39, 'Y', '钇', 5, 3, 'tm'],
+    [40, 'Zr', '锆', 5, 4, 'tm'],
+    [41, 'Nb', '铌', 5, 5, 'tm'],
+    [42, 'Mo', '钼', 5, 6, 'tm'],
+    [43, 'Tc', '锝', 5, 7, 'tm'],
+    [44, 'Ru', '钌', 5, 8, 'tm'],
+    [45, 'Rh', '铑', 5, 9, 'tm'],
+    [46, 'Pd', '钯', 5, 10, 'tm'],
+    [47, 'Ag', '银', 5, 11, 'tm'],
+    [48, 'Cd', '镉', 5, 12, 'tm'],
+    [49, 'In', '铟', 5, 13, 'pm'],
+    [50, 'Sn', '锡', 5, 14, 'pm'],
+    [51, 'Sb', '锑', 5, 15, 'ml'],
+    [52, 'Te', '碲', 5, 16, 'ml'],
+    [53, 'I', '碘', 5, 17, 'hl'],
+    [54, 'Xe', '氙', 5, 18, 'ng'],
+    [55, 'Cs', '铯', 6, 1, 'am'],
+    [56, 'Ba', '钡', 6, 2, 'ae'],
+    [57, 'La', '镧', 8, 3, 'ln'],
+    [58, 'Ce', '铈', 8, 4, 'ln'],
+    [59, 'Pr', '镨', 8, 5, 'ln'],
+    [60, 'Nd', '钕', 8, 6, 'ln'],
+    [61, 'Pm', '钷', 8, 7, 'ln'],
+    [62, 'Sm', '钐', 8, 8, 'ln'],
+    [63, 'Eu', '铕', 8, 9, 'ln'],
+    [64, 'Gd', '钆', 8, 10, 'ln'],
+    [65, 'Tb', '铽', 8, 11, 'ln'],
+    [66, 'Dy', '镝', 8, 12, 'ln'],
+    [67, 'Ho', '钬', 8, 13, 'ln'],
+    [68, 'Er', '铒', 8, 14, 'ln'],
+    [69, 'Tm', '铥', 8, 15, 'ln'],
+    [70, 'Yb', '镱', 8, 16, 'ln'],
+    [71, 'Lu', '镥', 8, 17, 'ln'],
+    [72, 'Hf', '铪', 6, 4, 'tm'],
+    [73, 'Ta', '钽', 6, 5, 'tm'],
+    [74, 'W', '钨', 6, 6, 'tm'],
+    [75, 'Re', '铼', 6, 7, 'tm'],
+    [76, 'Os', '锇', 6, 8, 'tm'],
+    [77, 'Ir', '铱', 6, 9, 'tm'],
+    [78, 'Pt', '铂', 6, 10, 'tm'],
+    [79, 'Au', '金', 6, 11, 'tm'],
+    [80, 'Hg', '汞', 6, 12, 'tm'],
+    [81, 'Tl', '铊', 6, 13, 'pm'],
+    [82, 'Pb', '铅', 6, 14, 'pm'],
+    [83, 'Bi', '铋', 6, 15, 'pm'],
+    [84, 'Po', '钋', 6, 16, 'ml'],
+    [85, 'At', '砹', 6, 17, 'hl'],
+    [86, 'Rn', '氡', 6, 18, 'ng'],
+    [87, 'Fr', '钫', 7, 1, 'am'],
+    [88, 'Ra', '镭', 7, 2, 'ae'],
+    [89, 'Ac', '锕', 9, 3, 'an'],
+    [90, 'Th', '钍', 9, 4, 'an'],
+    [91, 'Pa', '镤', 9, 5, 'an'],
+    [92, 'U', '铀', 9, 6, 'an'],
+    [93, 'Np', '镎', 9, 7, 'an'],
+    [94, 'Pu', '钚', 9, 8, 'an'],
+    [95, 'Am', '镅', 9, 9, 'an'],
+    [96, 'Cm', '锔', 9, 10, 'an'],
+    [97, 'Bk', '锫', 9, 11, 'an'],
+    [98, 'Cf', '锎', 9, 12, 'an'],
+    [99, 'Es', '锿', 9, 13, 'an'],
+    [100, 'Fm', '镄', 9, 14, 'an'],
+    [101, 'Md', '钔', 9, 15, 'an'],
+    [102, 'No', '锘', 9, 16, 'an'],
+    [103, 'Lr', '铹', 9, 17, 'an'],
+    [104, 'Rf', '𬬻', 7, 4, 'tm'],
+    [105, 'Db', '𬭊', 7, 5, 'tm'],
+    [106, 'Sg', '𬭳', 7, 6, 'tm'],
+    [107, 'Bh', '𬭛', 7, 7, 'tm'],
+    [108, 'Hs', '𬭶', 7, 8, 'tm'],
+    [109, 'Mt', '鿏', 7, 9, 'tm'],
+    [110, 'Ds', '𫟼', 7, 10, 'tm'],
+    [111, 'Rg', '𬬭', 7, 11, 'tm'],
+    [112, 'Cn', '鿔', 7, 12, 'tm'],
+    [113, 'Nh', '鿭', 7, 13, 'pm'],
+    [114, 'Fl', '𫓧', 7, 14, 'pm'],
+    [115, 'Mc', '镆', 7, 15, 'pm'],
+    [116, 'Lv', '𫟷', 7, 16, 'pm'],
+    [117, 'Ts', '鿬', 7, 17, 'hl'],
+    [118, 'Og', '鿫', 7, 18, 'ng']
+  ];
+
+  /* 104~118 的中文名是扩展区生僻字，多数系统字体缺字。
+   * 这里给出 ASCII 兜底名，渲染层检测不到字形时使用。 */
+  var FALLBACK_NAME = {
+    104: 'Rf', 105: 'Db', 106: 'Sg', 107: 'Bh', 108: 'Hs', 109: 'Mt',
+    110: 'Ds', 111: 'Rg', 112: 'Cn', 113: 'Nh', 114: 'Fl', 115: 'Mc',
+    116: 'Lv', 117: 'Ts', 118: 'Og'
+  };
+
+  var CAT_LABEL = {
+    nm: '非金属', hl: '卤素', ng: '稀有气体', am: '碱金属',
+    ae: '碱土金属', ml: '准金属', pm: '后过渡金属', tm: '过渡金属',
+    ln: '镧系', an: '锕系'
+  };
+
+  /* ---------- 构建 ------------- */
+  var ELEMENTS = [];
+  var BY_Z = Object.create(null);
+  var BY_POS = Object.create(null);
+
+  for (var i = 0; i < RAW.length; i++) {
+    var r = RAW[i];
+    var el = {
+      z: r[0], sym: r[1], name: r[2], row: r[3], col: r[4], cat: r[5],
+      catLabel: CAT_LABEL[r[5]],
+      key: 'r' + r[3] + 'c' + r[4],
+      isFBlock: r[5] === 'ln' || r[5] === 'an'
+    };
+    ELEMENTS.push(el);
+    BY_Z[el.z] = el;
+    BY_POS[el.key] = el;
+  }
+  ELEMENTS.sort(function (a, b) { return a.z - b.z; });
+
+  /* ---------- 位置编码 -------------
+   * 镧系 / 锕系改成「踩到占位格才进」之后，
+   * 同一个元素序号会有两个不同的落点：
+   *   主表 (6,3) 的「57-71」占位格  ↔  镧系行里的 La(57)
+   * 所以位置不能直接用 z，要用 slotId：
+   *
+   *   1 ~ 56        主表
+   *   1001          主表镧系占位格（视觉 6,3）
+   *   72 ~ 88       主表
+   *   1002          主表锕系占位格（视觉 7,3）
+   *   104 ~ 118     主表（118 是终点）
+   *   2000 ~ 2014   镧系 57 ~ 71
+   *   3000 ~ 3014   锕系 89 ~ 103
+   */
+  var SLOT_LN = 2000;
+  var SLOT_AN = 3000;
+  var SLOT_P_LN = 1001;
+  var SLOT_P_AN = 1002;
+
+  /* 主表轨道：1..56 → 占位 → 72..88 → 占位 → 104..118，共 90 格 */
+  var MAIN_TRACK = [];
+  (function () {
+    var z;
+    for (z = 1; z <= 56; z++) MAIN_TRACK.push(z);
+    MAIN_TRACK.push(SLOT_P_LN);
+    for (z = 72; z <= 88; z++) MAIN_TRACK.push(z);
+    MAIN_TRACK.push(SLOT_P_AN);
+    for (z = 104; z <= 118; z++) MAIN_TRACK.push(z);
+  })();
+
+  var LN_TRACK = [];
+  var AN_TRACK = [];
+  (function () {
+    var i;
+    for (i = 0; i < 15; i++) LN_TRACK.push(SLOT_LN + i);   // 57..71
+    for (i = 0; i < 15; i++) AN_TRACK.push(SLOT_AN + i);   // 89..103
+  })();
+
+  var MAIN_INDEX = {};
+  (function () {
+    for (var i = 0; i < MAIN_TRACK.length; i++) MAIN_INDEX[MAIN_TRACK[i]] = i;
+  })();
+
+  /** slotId → 元素序号（渲染、知识卡、特殊格都用它） */
+  function slotZ(id) {
+    if (id === SLOT_P_LN) return 57;
+    if (id === SLOT_P_AN) return 89;
+    if (id >= SLOT_LN && id <= SLOT_LN + 14) return 57 + (id - SLOT_LN);
+    if (id >= SLOT_AN && id <= SLOT_AN + 14) return 89 + (id - SLOT_AN);
+    return id;
+  }
+
+  /** slotId → 视觉坐标 {row, col} */
+  function slotPos(id) {
+    if (id === SLOT_P_LN) return { row: 6, col: 3 };
+    if (id === SLOT_P_AN) return { row: 7, col: 3 };
+    var e = BY_Z[slotZ(id)];
+    return e ? { row: e.row, col: e.col } : null;
+  }
+
+  function isPlaceholder(id) {
+    return id === SLOT_P_LN || id === SLOT_P_AN;
+  }
+
+  function slotZone(id) {
+    if (id >= SLOT_LN && id <= SLOT_LN + 14) return 'ln';
+    if (id >= SLOT_AN && id <= SLOT_AN + 14) return 'an';
+    return null;
+  }
+
+  /* ---------- 特殊格子 -------------
+   * up/down/left/right = 方向格；duel/sleep/again/tornado = 效果格
+   * 位移后不再二次触发，避免连锁
+   */
+  var SPECIALS = Object.create(null);
+  function put(list, type) {
+    for (var i = 0; i < list.length; i++) {
+      SPECIALS[list[i]] = { type: type };
+    }
+  }
+  put([14, 33, 52, 79, 105], 'duel');
+  put([9, 25, 40, 61, 76, 95, 111], 'sleep');
+  put([6, 21, 45, 68, 84, 108], 'again');
+  put([12, 38, 74, 99], 'tornado');
+  put([27, 63, 92], 'up');
+  put([18, 50, 86], 'down');
+  put([31, 58, 102], 'left');
+  put([22, 42, 78, 112], 'right');
+
+  /* 特殊格标记统一用中文单字：
+   * 一是保证任何字体都能显示（⚔ / 🌪 在 Windows 会退化成叉或彩色 emoji），
+   * 二是更像课本空白处的批注，跟整体怀旧调子一致。
+   */
+  var SPECIAL_META = {
+    up: { glyph: '↑', label: '上行', desc: '同族向上一周期（1 格）', tone: 'arrow' },
+    down: { glyph: '↓', label: '下行', desc: '同族向下一周期（1 格）', tone: 'arrow' },
+    left: { glyph: '←', label: '左移', desc: '同周期向左 3~5 格', tone: 'arrow' },
+    right: { glyph: '→', label: '右移', desc: '同周期向右 3~5 格', tone: 'arrow' },
+    duel: { glyph: '斗', label: '决斗', desc: '与一名对手轮流按 RAN，先出 ≥0.9 者胜，败者停一回合', tone: 'duel' },
+    sleep: { glyph: '眠', label: '睡觉', desc: '停一回合', tone: 'sleep' },
+    again: { glyph: '再', label: '多摇一次', desc: '本回合再掷一次', tone: 'again' },
+    tornado: { glyph: '风', label: '龙卷风', desc: '118×RAN+0.5，随机传送到一个元素格', tone: 'tornado' }
+  };
+
+  /* ---------- 三套封面主题（CSS 手工复刻，非原图） ---------- */
+  var THEMES = [
+    {
+      id: 'reaction',
+      title: '化学反应原理',
+      volume: '选择性必修 1',
+      subtitle: '反应的方向、限度与速率',
+      press: '山东科学技术出版社',
+      accent: '#e0567f',
+      accentSoft: '#f3a7bd',
+      deep: '#2a1230',
+      glow: '#ff7aa2',
+      pattern: 'molecule'
+    },
+    {
+      id: 'structure',
+      title: '物质结构与性质',
+      volume: '选择性必修 2',
+      subtitle: '原子、键与晶体的秩序',
+      press: '山东科学技术出版社',
+      accent: '#3fb6a8',
+      accentSoft: '#8fe0d4',
+      deep: '#0e2434',
+      glow: '#5fe0cc',
+      pattern: 'lattice'
+    },
+    {
+      id: 'organic',
+      title: '有机化学基础',
+      volume: '选择性必修 3',
+      subtitle: '碳的骨架与它的脾气',
+      press: '山东科学技术出版社',
+      accent: '#e0913f',
+      accentSoft: '#f5c98a',
+      deep: '#2d1f10',
+      glow: '#ffb35c',
+      pattern: 'hex'
+    }
+  ];
+
+  /* ---------- 窗口提示语（怀旧氛围） ---------- */
+  var AMBIENT_LINES = [
+    '傍晚五点四十，窗外是橙色的。',
+    '广播里在放《送别》，你跟着哼了两句。',
+    '煎饼果子还热着，纸袋上有一圈油印。',
+    '《化学反应原理》翻到最后一页，空白处写满了公式。',
+    '科学计算器的按键有点松了，RAN 键被按得发亮。',
+    '对面座位的饭盒打开了，是稻稻香。',
+    '有人去操场跑步了，教室里只剩几个人。',
+    '日光灯还没开，天色自己亮着。',
+    '粉笔灰在斜射的光里浮着，很慢。',
+    '算到 118，晚自习的铃声就该响了。'
+  ];
+
+  /* ---------- 导出 ------------- */
+  global.EPF = global.EPF || {};
+  global.EPF.data = {
+    ELEMENTS: ELEMENTS,
+    BY_Z: BY_Z,
+    BY_POS: BY_POS,
+    SPECIALS: SPECIALS,
+    SPECIAL_META: SPECIAL_META,
+    THEMES: THEMES,
+    CAT_LABEL: CAT_LABEL,
+    FALLBACK_NAME: FALLBACK_NAME,
+    AMBIENT_LINES: AMBIENT_LINES,
+    MAX_Z: 118,
+    ROWS_MAIN: 7,
+    COLS: 18,
+
+    /* 位置编码 */
+    SLOT_LN: SLOT_LN,
+    SLOT_AN: SLOT_AN,
+    SLOT_P_LN: SLOT_P_LN,
+    SLOT_P_AN: SLOT_P_AN,
+    MAIN_TRACK: MAIN_TRACK,
+    LN_TRACK: LN_TRACK,
+    AN_TRACK: AN_TRACK,
+    MAIN_INDEX: MAIN_INDEX,
+    slotZ: slotZ,
+    slotPos: slotPos,
+    isPlaceholder: isPlaceholder,
+    slotZone: slotZone
+  };
+})(window);

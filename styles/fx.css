@@ -1,0 +1,319 @@
+/* ============================================================
+ * fx.css — 交互特效层
+ * 光晕 / 粒子画布 / 元素知识卡 / 格子磁吸
+ * ============================================================ */
+
+/* ============================================================
+ * 鼠标光晕：只照亮背景，压在内容之下
+ * ============================================================ */
+.halo {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  width: 520px;
+  height: 520px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: .16;
+  mix-blend-mode: screen;
+  background: radial-gradient(circle,
+    var(--glow) 0%,
+    color-mix(in srgb, var(--glow) 40%, transparent) 34%,
+    transparent 66%);
+  filter: blur(26px);
+  will-change: transform;
+  transition: opacity var(--dur-slow) var(--ease-out);
+}
+
+/* ============================================================
+ * 粒子画布：在内容之上、弹窗之下
+ * ============================================================ */
+#fx {
+  position: fixed;
+  inset: 0;
+  z-index: 51;
+  pointer-events: none;
+  display: block;
+}
+
+/* ============================================================
+ * 温度：进入舞台后粒子更活跃
+ * ============================================================ */
+body.is-stage .halo { opacity: .19; }
+
+/* ============================================================
+ * 元素知识卡
+ * ============================================================ */
+.ecard {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 55;
+  width: 302px;
+  padding: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--ink);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .07), transparent 34%),
+    rgba(12, 7, 18, .88);
+  border: 1px solid color-mix(in srgb, var(--ec-accent, var(--accent)) 42%, transparent);
+  backdrop-filter: blur(22px) saturate(1.25);
+  -webkit-backdrop-filter: blur(22px) saturate(1.25);
+  box-shadow:
+    0 26px 70px -22px rgba(0, 0, 0, .92),
+    0 0 0 1px rgba(255, 255, 255, .04) inset,
+    0 0 40px -18px var(--ec-accent, var(--accent));
+  opacity: 0;
+  scale: .96;
+  translate: 0 6px;
+  transition:
+    opacity 170ms var(--ease-out),
+    scale 200ms var(--ease-out),
+    translate 200ms var(--ease-out);
+  will-change: transform, opacity;
+}
+
+.ecard[data-show="1"] {
+  opacity: 1;
+  scale: 1;
+  translate: 0 0;
+}
+
+/* ---------- 顶部：序号 + 符号 + 名字 ---------- */
+.ecard__top {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px 12px;
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--ec-accent, var(--accent)) 30%, transparent),
+      transparent 72%);
+  border-bottom: 1px solid var(--line);
+}
+
+.ecard__z {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .1em;
+  color: var(--ink-faint);
+}
+
+.ecard__sym {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  font-family: var(--font-serif);
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 1;
+  color: #fff;
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255, 255, 255, .34), transparent 62%),
+    color-mix(in srgb, var(--ec-accent, var(--accent)) 78%, #000);
+  box-shadow:
+    0 6px 18px -8px var(--ec-accent, var(--accent)),
+    inset 0 1px 0 rgba(255, 255, 255, .3);
+}
+
+.ecard__id { min-width: 0; }
+
+.ecard__name {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .04em;
+}
+
+.ecard__pos {
+  margin-top: 2px;
+  font-size: 10.5px;
+  letter-spacing: .06em;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- 数据行 ---------- */
+.ecard__rows {
+  display: grid;
+  gap: 1px;
+  padding: 10px 16px 4px;
+}
+
+.ecard__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  line-height: 1.9;
+}
+
+.ecard__row span {
+  color: var(--ink-faint);
+  flex: none;
+  letter-spacing: .04em;
+}
+
+.ecard__row b {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ec-accent-soft, var(--accent-soft));
+  text-align: right;
+}
+
+/* ---------- 能级排布 ---------- */
+.ecard__config {
+  margin: 6px 12px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.7;
+  letter-spacing: .02em;
+  color: var(--ink-dim);
+  background: rgba(0, 0, 0, .34);
+  border: 1px solid var(--line);
+  word-break: break-word;
+}
+
+/* ---------- 考点 ---------- */
+.ecard__facts {
+  display: grid;
+  gap: 6px;
+  padding: 10px 16px 12px;
+}
+
+.ecard__fact {
+  position: relative;
+  padding-left: 13px;
+  font-size: 11.5px;
+  line-height: 1.62;
+  color: var(--ink-dim);
+}
+
+.ecard__fact::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: .60em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ec-accent, var(--accent));
+  box-shadow: 0 0 7px var(--ec-accent, var(--accent));
+}
+
+.ecard__tail {
+  padding: 7px 16px 11px;
+  font-size: 10px;
+  letter-spacing: .1em;
+  color: var(--ink-faint);
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- 类别配色 ---------- */
+.ecard__top[data-cat="am"] { --ec-accent: #e0785a; --ec-accent-soft: #ffb199; }
+.ecard__top[data-cat="ae"] { --ec-accent: #e0a15a; --ec-accent-soft: #ffcf9c; }
+.ecard__top[data-cat="tm"] { --ec-accent: #c9b06b; --ec-accent-soft: #f0dfa4; }
+.ecard__top[data-cat="pm"] { --ec-accent: #8fb46a; --ec-accent-soft: #c6e29e; }
+.ecard__top[data-cat="ml"] { --ec-accent: #6fb5a0; --ec-accent-soft: #a9e6d4; }
+.ecard__top[data-cat="nm"] { --ec-accent: #5fa9d0; --ec-accent-soft: #a5d8f2; }
+.ecard__top[data-cat="hl"] { --ec-accent: #7d8fe0; --ec-accent-soft: #bcc6ff; }
+.ecard__top[data-cat="ng"] { --ec-accent: #b07ad0; --ec-accent-soft: #dbb6f5; }
+.ecard__top[data-cat="ln"] { --ec-accent: #d17aa8; --ec-accent-soft: #f7b8d4; }
+.ecard__top[data-cat="an"] { --ec-accent: #a97ad1; --ec-accent-soft: #d6b4f2; }
+
+/* 让整张卡的边框/光晕跟着类别走 */
+.ecard:has(.ecard__top[data-cat="am"]) { --ec-accent: #e0785a; }
+.ecard:has(.ecard__top[data-cat="ae"]) { --ec-accent: #e0a15a; }
+.ecard:has(.ecard__top[data-cat="tm"]) { --ec-accent: #c9b06b; }
+.ecard:has(.ecard__top[data-cat="pm"]) { --ec-accent: #8fb46a; }
+.ecard:has(.ecard__top[data-cat="ml"]) { --ec-accent: #6fb5a0; }
+.ecard:has(.ecard__top[data-cat="nm"]) { --ec-accent: #5fa9d0; }
+.ecard:has(.ecard__top[data-cat="hl"]) { --ec-accent: #7d8fe0; }
+.ecard:has(.ecard__top[data-cat="ng"]) { --ec-accent: #b07ad0; }
+.ecard:has(.ecard__top[data-cat="ln"]) { --ec-accent: #d17aa8; }
+.ecard:has(.ecard__top[data-cat="an"]) { --ec-accent: #a97ad1; }
+
+/* ============================================================
+ * 格子磁吸：靠近鼠标会朝它歪一点，并有一块跟随高光
+ * ============================================================ */
+.cell.is-magnet {
+  transform:
+    perspective(620px)
+    rotateX(var(--tilt-x, 0deg))
+    rotateY(var(--tilt-y, 0deg))
+    translateY(-3px)
+    scale(1.085);
+  z-index: 6;
+  border-color: var(--accent-soft);
+  box-shadow:
+    0 14px 34px -12px rgba(0, 0, 0, .86),
+    0 0 0 1px var(--accent-soft),
+    0 0 30px -6px var(--glow);
+}
+
+.cell.is-magnet::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at var(--mx, 50%) var(--my, 50%),
+    rgba(255, 255, 255, .26) 0%,
+    rgba(255, 255, 255, .06) 34%,
+    transparent 66%);
+  opacity: .9;
+}
+
+/* 磁吸时中文名浮起来一点，别被高光糊掉 */
+.cell.is-magnet .cell__name {
+  color: rgba(255, 255, 255, .86);
+}
+
+.cell.is-magnet .cell__sym {
+  text-shadow: 0 0 16px color-mix(in srgb, var(--glow) 60%, transparent);
+}
+
+/* ============================================================
+ * 上下文光标提示
+ * ============================================================ */
+body.is-stage .cell[data-z] { cursor: help; }
+
+/* ============================================================
+ * 触屏与省电模式
+ * ============================================================ */
+@media (hover: none) {
+  .halo { display: none; }
+  #fx { display: none; }
+  .cell.is-magnet { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .halo,
+  #fx { display: none; }
+  .ecard { transition: none; }
+}
+
+/* 卡片在小屏上收窄，避免糊住半个棋盘 */
+@media (max-width: 560px) {
+  .ecard {
+    width: min(268px, 84vw);
+  }
+  .ecard__sym { width: 44px; height: 44px; font-size: 21px; }
+  .ecard__name { font-size: 17px; }
+}
