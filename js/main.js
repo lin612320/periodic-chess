@@ -166,55 +166,155 @@
     try { sessionStorage.setItem(k, v); } catch (e) { /* 忽略 */ }
   }
 
+  /* ---------------------------------------------------------
+   * 联机：开房间 / 加入房间（P2P 直连）
+   * ------------------------------------------------------- */
+  var lan = { role: 'none', invite: null, name: '' };
+
+  function copyText(text, done) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+    } else {
+      done(false);
+    }
+  }
+
   function openLanPanel() {
-    var randRoom = String(Math.floor(1000 + Math.random() * 9000));
-    var lastRoom = storeGet('epf.room') || randRoom;
     var lastName = storeGet('epf.name') || '';
 
     var html = ''
-      + '<p class="modal__kicker">局域网联机</p>'
-      + '<h3 class="modal__title">同一间教室</h3>'
+      + '<p class="modal__kicker">联机</p>'
+      + '<h3 class="modal__title">开一间房</h3>'
       + '<div class="modal__body">'
-      + '<p>房间码一样的人就在同一局里。第一个进房间的人是房主，随机数和判定都由房主算。</p>'
+      + '<p>点「开房间」的那台设备就是这局的服务器——判定、随机数、广播全在它上面跑。别人点「加入房间」连过来，不需要任何服务器。</p>'
       + '</div>'
       + '<div class="lan-form">'
-      + '<label class="lan-field"><span>房间码</span>'
-      + '<input id="lanRoom" maxlength="8" value="' + lastRoom + '" autocomplete="off"></label>'
       + '<label class="lan-field"><span>昵称</span>'
       + '<input id="lanName" maxlength="12" value="' + lastName + '" placeholder="随便取一个" autocomplete="off"></label>'
+      + '</div>'
+      + '<div class="lan-choices">'
+      + '<button type="button" class="lan-choice" data-act="host">'
+      + '<b>开房间</b><span>我来当服务器</span></button>'
+      + '<button type="button" class="lan-choice" data-act="client">'
+      + '<b>加入房间</b><span>我有邀请码</span></button>'
       + '</div>'
       + '<div class="lan-status" id="lanStatus"></div>'
       + '<div class="modal__actions">'
       + '<button type="button" class="btn btn--ghost" data-act="close">算了</button>'
-      + '<button type="button" class="btn btn--primary" data-act="join">进教室</button>'
       + '</div>';
 
     var box = U.showModal(html);
+    var nameInput = box.querySelector('#lanName');
     var status = box.querySelector('#lanStatus');
+
+    function readName() {
+      var n = (nameInput.value || '').trim() || '玩家';
+      storeSet('epf.name', n);
+      lan.name = n;
+      return n;
+    }
 
     box.querySelector('[data-act="close"]').addEventListener('click', function () {
       N.disconnect();
       mode = 'solo';
+      lan.role = 'none';
       U.hideModal();
     });
 
-    box.querySelector('[data-act="join"]').addEventListener('click', function () {
-      var room = box.querySelector('#lanRoom').value.trim().toUpperCase();
-      var name = box.querySelector('#lanName').value.trim() || '玩家';
-      if (!room) { status.textContent = '房间码不能空着'; return; }
+    box.querySelector('[data-act="host"]').addEventListener('click', function () {
+      status.textContent = '正在开房间…';
+      N.startHost(readName()).then(function (room) {
+        lan.role = 'host';
+        renderHostRoom(room.code);
+      }).catch(function (err) {
+        status.textContent = '开房间失败：' + (err.message || err);
+      });
+    });
 
-      storeSet('epf.room', room);
-      storeSet('epf.name', name);
-      status.textContent = '正在连…';
+    box.querySelector('[data-act="client"]').addEventListener('click', function () {
+      renderJoinRoom(readName());
+    });
+  }
 
-      N.connect({ room: room, name: name })
-        .then(function () { return N.join(room, name); })
-        .then(function () {
-          status.textContent = '已进房间，等房主开局';
-        })
-        .catch(function (err) {
-          status.textContent = err.message || '连不上';
-        });
+  /* ---------- 房主：显示房间码 ---------- */
+  function renderHostRoom(code) {
+    var html = ''
+      + '<p class="modal__kicker">房间已开好</p>'
+      + '<h3 class="modal__title">把这 6 位数字告诉他们</h3>'
+      + '<div class="lan-roomcode" id="lanRoomCode">' + code + '</div>'
+      + '<div class="lan-code-actions">'
+      + '<button type="button" class="btn btn--tiny" data-act="copy">复制房间码</button>'
+      + '</div>'
+      + '<div class="modal__body"><p>他们打开同一个网址 → 联机 → 加入房间 → 输入这 6 位数字，就会自动连到你这台设备。'
+      + '你这台就是这局的服务器，判定和随机数都在你这里算。</p></div>'
+      + '<div class="lan-status" id="lanStatus">还没有人连进来</div>'
+      + '<div class="modal__actions">'
+      + '<button type="button" class="btn btn--ghost" data-act="close">关掉</button>'
+      + '<button type="button" class="btn btn--primary" data-act="go" disabled>等别人进来</button>'
+      + '</div>';
+
+    var box = U.showModal(html);
+    var status = box.querySelector('#lanStatus');
+    var goBtn = box.querySelector('[data-act="go"]');
+
+    box.querySelector('[data-act="copy"]').addEventListener('click', function () {
+      copyText(code, function (ok) {
+        U.toast(ok ? '房间码已复制：' + code : '复制失败，念给他们听：' + code);
+      });
+    });
+
+    box.querySelector('[data-act="close"]').addEventListener('click', function () {
+      N.disconnect();
+      mode = 'solo';
+      lan.role = 'none';
+      U.hideModal();
+    });
+
+    goBtn.addEventListener('click', hostStartLan);
+  }
+
+  /* ---------- 客机：输入房间码 ---------- */
+  function renderJoinRoom(name) {
+    var html = ''
+      + '<p class="modal__kicker">加入房间</p>'
+      + '<h3 class="modal__title">输入房主的 6 位房间码</h3>'
+      + '<input id="lanCodeInput" class="lan-codeinput" inputmode="numeric" maxlength="6"'
+      + ' placeholder="000000" autocomplete="off">'
+      + '<div class="lan-status" id="lanStatus"></div>'
+      + '<div class="modal__actions">'
+      + '<button type="button" class="btn btn--ghost" data-act="close">算了</button>'
+      + '<button type="button" class="btn btn--primary" data-act="join">进去</button>'
+      + '</div>';
+
+    var box = U.showModal(html);
+    var status = box.querySelector('#lanStatus');
+    var input = box.querySelector('#lanCodeInput');
+    setTimeout(function () { try { input.focus(); } catch (e) { /* noop */ } }, 120);
+
+    box.querySelector('[data-act="close"]').addEventListener('click', function () {
+      N.disconnect();
+      mode = 'solo';
+      lan.role = 'none';
+      U.hideModal();
+    });
+
+    function doJoin() {
+      var code = (input.value || '').replace(/\D/g, '');
+      if (code.length !== 6) { status.textContent = '房间码是 6 位数字'; return; }
+      status.textContent = '正在连房主…';
+
+      N.joinRoom(code, name).then(function () {
+        lan.role = 'client';
+        status.textContent = '连上了，等房主开局';
+        U.toast('已进房间，等房主开局');
+      }).catch(function (err) {
+        status.textContent = err.message || '连不上';
+      });
+    }
+
+    box.querySelector('[data-act="join"]').addEventListener('click', doJoin);
+    input.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') { ev.preventDefault(); doJoin(); }
     });
   }
 
@@ -224,34 +324,31 @@
   function bindNet() {
     N.on('room', function (info) {
       var box = U.dom.modalBox;
-      var status = box.querySelector('#lanStatus');
-      if (status) {
-        var names = info.roster.map(function (r, i) {
-          return (i === 0 ? '★ ' : '') + r.name;
-        }).join('、');
-        status.textContent = (info.isHost ? '你是房主' : '你是第 ' + (info.seat + 1) + ' 位') +
-          '　房间 ' + info.room + '　成员：' + names;
+      if (!box) return;
 
-        if (info.roster.length >= 2) {
-          var actions = box.querySelector('.modal__actions');
-          if (actions) {
-            var go = actions.querySelector('[data-act="go"]');
-            if (!go) {
-              go = document.createElement('button');
-              go.type = 'button';
-              go.className = 'btn btn--primary';
-              go.dataset.act = 'go';
-              go.addEventListener('click', hostStartLan);
-              actions.insertBefore(go, actions.firstChild);
-            }
-            // 每次 roster 变化都要同步：谁是房主可能已经变了
-            go.disabled = !info.isHost;
-            go.textContent = info.isHost ? '开局（房主）' : '等房主开局…';
-          }
-        } else if (box.querySelector('[data-act="go"]')) {
-          box.querySelector('[data-act="go"]').remove();
-        }
+      var names = (info.roster || []).map(function (r, i) {
+        return (i === 0 ? '★ ' : '') + r.name;
+      }).join('、');
+
+      var status = box.querySelector('#lanStatus');
+      var go = box.querySelector('[data-act="go"]');
+
+      if (status) {
+        status.textContent = '房间成员（' + info.roster.length + '）：' + names;
       }
+      if (go) {
+        var canStart = info.isHost && info.roster.length >= 2;
+        go.disabled = !canStart;
+        go.textContent = info.isHost ? (canStart ? '开局' : '等别人进来') : '等房主开局…';
+      }
+    });
+
+    N.on('peer-joined', function (p) {
+      U.toast(p.name + ' 连进来了');
+    });
+
+    N.on('peer-left', function (p) {
+      U.toast((p.name || '有人') + ' 断开了');
     });
 
     N.on('start', function (msg) {

@@ -486,6 +486,150 @@
 }
 
 /* ============================================================
+ * 联机：开房间 / 加入房间
+ * ============================================================ */
+.lan-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.lan-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 16px 16px 15px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, .04);
+  text-align: left;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+
+.lan-choice:hover {
+  border-color: var(--accent-soft);
+  background: rgba(255, 255, 255, .09);
+  transform: translateY(-2px);
+}
+
+.lan-choice b {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: .06em;
+}
+
+.lan-choice span {
+  font-size: 11px;
+  letter-spacing: .06em;
+  color: var(--ink-faint);
+}
+
+/* 长码文本框 */
+.lan-code {
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--accent-soft);
+  background: rgba(0, 0, 0, .42);
+  border: 1px solid var(--line);
+  outline: none;
+  resize: vertical;
+  word-break: break-all;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+
+.lan-code:focus {
+  border-color: var(--accent-soft);
+  background: rgba(0, 0, 0, .55);
+}
+
+/* 房间码：大字，方便念出口 */
+.lan-roomcode {
+  margin: 18px 0 10px;
+  padding: 18px 10px;
+  border-radius: 16px;
+  font-family: var(--font-mono);
+  font-size: clamp(38px, 7vw, 58px);
+  font-weight: 700;
+  letter-spacing: .3em;
+  text-indent: .3em;
+  text-align: center;
+  color: #fff;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .1), transparent 46%),
+    linear-gradient(135deg, var(--accent), var(--glow));
+  box-shadow:
+    0 14px 40px -16px var(--accent),
+    inset 0 1px 0 rgba(255, 255, 255, .34),
+    inset 0 -3px 0 rgba(0, 0, 0, .22);
+  user-select: all;
+  cursor: pointer;
+}
+
+/* 输入房间码 */
+.lan-codeinput {
+  width: 100%;
+  margin: 18px 0 6px;
+  padding: 14px 10px;
+  border-radius: 14px;
+  font-family: var(--font-mono);
+  font-size: clamp(26px, 5vw, 38px);
+  font-weight: 700;
+  letter-spacing: .3em;
+  text-indent: .3em;
+  text-align: center;
+  color: var(--accent-soft);
+  background: rgba(0, 0, 0, .42);
+  border: 1px solid var(--line);
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+.lan-codeinput:focus {
+  border-color: var(--accent-soft);
+  background: rgba(0, 0, 0, .58);
+}
+
+.lan-codeinput::placeholder {
+  color: rgba(242, 232, 220, .18);
+}
+
+.lan-code-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.lan-field--stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.lan-field--stack span {
+  width: auto;
+  font-size: 11px;
+  color: var(--ink-faint);
+  letter-spacing: .06em;
+}
+
+.lan-field--stack .lan-code {
+  margin-top: 0;
+}
+
+@media (max-width: 560px) {
+  .lan-choices { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
  * 声音按钮
  * ============================================================ */
 .snd-dot {
